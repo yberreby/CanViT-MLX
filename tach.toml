@@ -38,7 +38,7 @@ expose = ["Viewpoint", "grid_coords", "sample_at_viewpoint", "canvas_coords_for_
 
 [[interfaces]]
 from = ["canvit_mlx.rope"]
-expose = ["compute_rope", "make_rope_periods", "apply_with_prefix", "apply_dinov3_with_prefix"]
+expose = ["compute_rope", "make_rope_periods", "apply_with_prefix"]
 
 [[interfaces]]
 from = ["canvit_mlx.model"]

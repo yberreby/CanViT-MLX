@@ -7,7 +7,7 @@ import mlx.core as mx
 import mlx.nn as nn
 
 from ..coords import Viewpoint, canvas_coords_for_glimpse, grid_coords, sample_at_viewpoint
-from ..rope import apply_dinov3_with_prefix, apply_with_prefix, compute_rope, make_rope_periods
+from ..rope import apply_with_prefix, compute_rope, make_rope_periods
 
 
 # ---------------------------------------------------------------------------
@@ -108,8 +108,8 @@ class SelfAttention(nn.Module):
         B, N, D = x.shape
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, self.head_dim)
         q, k, v = (qkv[:, :, i].transpose(0, 2, 1, 3) for i in range(3))
-        q = apply_dinov3_with_prefix(q, sin, cos)
-        k = apply_dinov3_with_prefix(k, sin, cos)
+        q = apply_with_prefix(q, sin, cos)
+        k = apply_with_prefix(k, sin, cos)
         out = mx.fast.scaled_dot_product_attention(q, k, v, scale=self.scale)
         return self.proj(out.transpose(0, 2, 1, 3).reshape(B, N, D))
 

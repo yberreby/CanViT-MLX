@@ -1,9 +1,4 @@
-"""2D Rotary Position Embeddings.
-
-Two equivalent styles (proven in LOG.md):
-- DINOv3 rotate-half: backbone self-attention
-- Explicit sin/cos split: canvas cross-attention (saves one allocation)
-"""
+"""2D Rotary Position Embeddings."""
 
 import math
 
@@ -11,6 +6,7 @@ import mlx.core as mx
 
 
 def make_rope_periods(head_dim: int, base: float = 100.0) -> mx.array:
+    assert head_dim % 4 == 0, f"2D RoPE requires head_dim divisible by 4, got {head_dim}"
     n_freqs = head_dim // 4
     return base ** (mx.arange(n_freqs) / n_freqs)
 
@@ -24,7 +20,7 @@ def compute_rope(positions: mx.array, periods: mx.array) -> tuple[mx.array, mx.a
 
 
 def apply_with_prefix(x: mx.array, sin: mx.array, cos: mx.array) -> mx.array:
-    """Explicit sin/cos split (canvas attention). x: [B, H, N, hd], sin/cos: [B, 1, N_spatial, hd]."""
+    """Apply 2D RoPE to spatial tokens, leaving prefix tokens unchanged."""
     n_prefix = x.shape[2] - sin.shape[2]
     half = x.shape[3] // 2
     prefix = x[:, :, :n_prefix] if n_prefix > 0 else None
@@ -35,12 +31,3 @@ def apply_with_prefix(x: mx.array, sin: mx.array, cos: mx.array) -> mx.array:
         x2 * cos[..., half:] + x1 * sin[..., half:],
     ], axis=-1)
     return mx.concatenate([prefix, spatial], axis=2) if prefix is not None else spatial
-
-
-def apply_dinov3_with_prefix(x: mx.array, sin: mx.array, cos: mx.array) -> mx.array:
-    """Rotate-half (backbone self-attention). Same args as apply_with_prefix."""
-    n_prefix = x.shape[2] - sin.shape[2]
-    spatial = x[:, :, n_prefix:]
-    x1, x2 = mx.split(spatial, 2, axis=-1)
-    spatial = spatial * cos + mx.concatenate([-x2, x1], axis=-1) * sin
-    return mx.concatenate([x[:, :, :n_prefix], spatial], axis=2) if n_prefix > 0 else spatial
