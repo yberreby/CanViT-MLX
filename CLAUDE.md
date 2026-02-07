@@ -5,7 +5,7 @@ MLX inference port of [CanViT](https://github.com/yberreby/CanViT).
 ## Setup
 
 ```bash
-uv run python convert.py   # HF Hub → weights.safetensors
+uv run python convert.py   # HF Hub → MLX-native safetensors
 uv run pytest -v            # verify against PyTorch reference (f32 CPU)
 ```
 
@@ -20,7 +20,7 @@ canvit_mlx/           # MLX package (NO canvit/PyTorch dependency)
 tests/                # all tests (may import canvit for reference)
   conftest.py         # shared fixtures, assert_close, PT helpers
   test_*.py           # unit + integration tests
-convert.py            # HF Hub → safetensors conversion
+convert.py            # HF Hub → MLX-native safetensors (key remapping + permutation)
 ```
 
 ## Key constraints
