@@ -16,10 +16,13 @@ import pytest
 import torch
 
 from canvit_mlx import (
+    CanViTOutput,
+    Viewpoint as MlxViewpoint,
     compute_rope as mlx_compute_rope,
     grid_coords as mlx_grid_coords,
     load_canvit,
     make_rope_periods as mlx_make_rope_periods,
+    sample_at_viewpoint as mlx_sample_at_viewpoint,
 )
 
 log = logging.getLogger(__name__)
@@ -199,8 +202,10 @@ class TestBlock0:
         assert_close("block0", pt_intermediates["after_block0"], out, atol=2e-3, rtol=1e-5)
 
 
-class TestFullForward:
-    def test_end_to_end(self, mlx_model, pt_intermediates):
+class TestBlockLoop:
+    """Verify the block loop with pre-computed inputs (isolates block logic from packing/RoPE)."""
+
+    def test_with_ref_inputs(self, mlx_model, pt_intermediates):
         cfg = mlx_model.cfg
         x = mx.array(pt_intermediates["packed"])
         canvas = mx.array(pt_intermediates["init_canvas"])
@@ -229,3 +234,159 @@ class TestFullForward:
         assert_close("final_cls", pt_intermediates["final_cls"], x[:, idx:idx+1], atol=1.0, rtol=1e-3)
         idx += 2 + cfg.n_register_tokens
         assert_close("final_patches", pt_intermediates["final_patches"], x[:, idx:idx+64], atol=1.0, rtol=1e-3)
+
+
+class TestSampleAtViewpoint:
+    """Verify hand-rolled bilinear sampling against PyTorch F.grid_sample."""
+
+    def test_full_scene(self, pt_model):
+        from canvit.viewpoint import Viewpoint as PtViewpoint, sample_at_viewpoint as pt_sample
+
+        torch.manual_seed(SEED + 1)
+        img_pt = torch.randn(B, 3, 64, 64)
+        vp_pt = PtViewpoint.full_scene(batch_size=B, device=torch.device("cpu"))
+
+        ref = pt_sample(spatial=img_pt, viewpoint=vp_pt, glimpse_size_px=32)
+        ref = ref.numpy().transpose(0, 2, 3, 1)  # NCHW -> NHWC
+
+        img_mlx = mx.array(img_pt.numpy().transpose(0, 2, 3, 1))
+        vp_mlx = MlxViewpoint.full_scene(batch_size=B)
+        got = mlx_sample_at_viewpoint(img_mlx, vp_mlx, 32)
+        mx.eval(got)
+
+        assert_close("sample_full_scene", ref, got, atol=1e-4)
+
+    def test_off_center(self, pt_model):
+        from canvit.viewpoint import Viewpoint as PtViewpoint, sample_at_viewpoint as pt_sample
+
+        torch.manual_seed(SEED + 2)
+        img_pt = torch.randn(B, 3, 64, 64)
+        vp_pt = PtViewpoint(
+            centers=torch.tensor([[0.3, -0.2]]),
+            scales=torch.tensor([0.5]),
+        )
+
+        ref = pt_sample(spatial=img_pt, viewpoint=vp_pt, glimpse_size_px=32)
+        ref = ref.numpy().transpose(0, 2, 3, 1)
+
+        img_mlx = mx.array(img_pt.numpy().transpose(0, 2, 3, 1))
+        vp_mlx = MlxViewpoint(
+            centers=mx.array([[0.3, -0.2]]),
+            scales=mx.array([0.5]),
+        )
+        got = mlx_sample_at_viewpoint(img_mlx, vp_mlx, 32)
+        mx.eval(got)
+
+        assert_close("sample_off_center", ref, got, atol=1e-4)
+
+
+def _run_pt_forward(pt_model, glimpse_pt, viewpoint_pt, state_pt):
+    """Run PyTorch forward and return outputs as numpy."""
+    with torch.inference_mode():
+        out = pt_model(glimpse=glimpse_pt, state=state_pt, viewpoint=viewpoint_pt)
+    return {
+        "canvas": out.state.canvas.numpy(),
+        "recurrent_cls": out.state.recurrent_cls.numpy(),
+        "ephemeral_cls": out.ephemeral_cls.numpy(),
+        "local_patches": out.local_patches.numpy(),
+    }
+
+
+def _run_mlx_forward(mlx_model, glimpse_mlx, viewpoint_mlx, state_mlx):
+    """Run MLX forward and return output."""
+    out = mlx_model(glimpse_mlx, state_mlx, viewpoint_mlx)
+    mx.eval(out.state.canvas, out.state.recurrent_cls, out.ephemeral_cls, out.local_patches)
+    return out
+
+
+class TestTrueEndToEnd:
+    """True end-to-end: raw glimpse in, compare all outputs against PyTorch."""
+
+    def test_full_scene(self, pt_model, mlx_model, glimpse_pt, glimpse_mlx):
+        from canvit.viewpoint import Viewpoint as PtViewpoint
+
+        vp_pt = PtViewpoint.full_scene(batch_size=B, device=torch.device("cpu"))
+        state_pt = pt_model.init_state(batch_size=B, canvas_grid_size=CANVAS_GRID)
+        ref = _run_pt_forward(pt_model, glimpse_pt, vp_pt, state_pt)
+
+        vp_mlx = MlxViewpoint.full_scene(batch_size=B)
+        state_mlx = mlx_model.init_state(batch_size=B, canvas_grid_size=CANVAS_GRID)
+        out = _run_mlx_forward(mlx_model, glimpse_mlx, vp_mlx, state_mlx)
+
+        assert_close("e2e_canvas", ref["canvas"], out.state.canvas, atol=2.0, rtol=1e-3)
+        assert_close("e2e_cls", ref["recurrent_cls"], out.state.recurrent_cls, atol=1.0, rtol=1e-3)
+        assert_close("e2e_ephemeral", ref["ephemeral_cls"], out.ephemeral_cls, atol=1.0, rtol=1e-3)
+        assert_close("e2e_patches", ref["local_patches"], out.local_patches, atol=1.0, rtol=1e-3)
+
+    def test_off_center_viewpoint(self, pt_model, mlx_model):
+        from canvit.viewpoint import Viewpoint as PtViewpoint
+
+        torch.manual_seed(SEED + 10)
+        glimpse_pt = torch.randn(B, 3, GLIMPSE_PX, GLIMPSE_PX)
+        glimpse_mlx = mx.array(glimpse_pt.numpy().transpose(0, 2, 3, 1))
+
+        vp_pt = PtViewpoint(
+            centers=torch.tensor([[-0.4, 0.3]]),
+            scales=torch.tensor([0.6]),
+        )
+        state_pt = pt_model.init_state(batch_size=B, canvas_grid_size=CANVAS_GRID)
+        ref = _run_pt_forward(pt_model, glimpse_pt, vp_pt, state_pt)
+
+        vp_mlx = MlxViewpoint(
+            centers=mx.array([[-0.4, 0.3]]),
+            scales=mx.array([0.6]),
+        )
+        state_mlx = mlx_model.init_state(batch_size=B, canvas_grid_size=CANVAS_GRID)
+        out = _run_mlx_forward(mlx_model, glimpse_mlx, vp_mlx, state_mlx)
+
+        # Canvas values reach ~2600 magnitude; f32 SDPA accumulation over 1040 tokens
+        # gives occasional absolute errors ~3-4 at extreme values (relative ~0.15%)
+        assert_close("e2e_offcenter_canvas", ref["canvas"], out.state.canvas, atol=5.0, rtol=2e-3)
+        assert_close("e2e_offcenter_cls", ref["recurrent_cls"], out.state.recurrent_cls, atol=1.0, rtol=1e-3)
+        assert_close("e2e_offcenter_patches", ref["local_patches"], out.local_patches, atol=1.0, rtol=1e-3)
+
+
+class TestMultiStep:
+    """Two consecutive forward passes — verifies state recurrence."""
+
+    def test_two_steps(self, pt_model, mlx_model):
+        from canvit.viewpoint import Viewpoint as PtViewpoint
+
+        torch.manual_seed(SEED + 20)
+        g1_pt = torch.randn(B, 3, GLIMPSE_PX, GLIMPSE_PX)
+        g2_pt = torch.randn(B, 3, GLIMPSE_PX, GLIMPSE_PX)
+        g1_mlx = mx.array(g1_pt.numpy().transpose(0, 2, 3, 1))
+        g2_mlx = mx.array(g2_pt.numpy().transpose(0, 2, 3, 1))
+
+        vp1_pt = PtViewpoint.full_scene(batch_size=B, device=torch.device("cpu"))
+        vp2_pt = PtViewpoint(centers=torch.tensor([[0.2, -0.3]]), scales=torch.tensor([0.7]))
+
+        # Step 1
+        state_pt = pt_model.init_state(batch_size=B, canvas_grid_size=CANVAS_GRID)
+        ref1 = _run_pt_forward(pt_model, g1_pt, vp1_pt, state_pt)
+
+        state_mlx = mlx_model.init_state(batch_size=B, canvas_grid_size=CANVAS_GRID)
+        vp1_mlx = MlxViewpoint.full_scene(batch_size=B)
+        out1 = _run_mlx_forward(mlx_model, g1_mlx, vp1_mlx, state_mlx)
+
+        assert_close("step1_canvas", ref1["canvas"], out1.state.canvas, atol=2.0, rtol=1e-3)
+
+        # Step 2: feed output state back in
+        from canvit.model.base.impl import RecurrentState as PtRecurrentState
+        state_pt2 = PtRecurrentState(
+            canvas=torch.tensor(ref1["canvas"]),
+            recurrent_cls=torch.tensor(ref1["recurrent_cls"]),
+        )
+        ref2 = _run_pt_forward(pt_model, g2_pt, vp2_pt, state_pt2)
+
+        from canvit_mlx import RecurrentState as MlxRecurrentState
+        state_mlx2 = MlxRecurrentState(
+            canvas=out1.state.canvas,
+            recurrent_cls=out1.state.recurrent_cls,
+        )
+        vp2_mlx = MlxViewpoint(centers=mx.array([[0.2, -0.3]]), scales=mx.array([0.7]))
+        out2 = _run_mlx_forward(mlx_model, g2_mlx, vp2_mlx, state_mlx2)
+
+        assert_close("step2_canvas", ref2["canvas"], out2.state.canvas, atol=3.0, rtol=2e-3)
+        assert_close("step2_cls", ref2["recurrent_cls"], out2.state.recurrent_cls, atol=2.0, rtol=2e-3)
+        assert_close("step2_patches", ref2["local_patches"], out2.local_patches, atol=2.0, rtol=2e-3)
