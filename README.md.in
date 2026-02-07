@@ -1,0 +1,30 @@
+# CanViT-MLX
+
+MLX inference port of [CanViT](https://github.com/yberreby/CanViT) for Apple Silicon.
+
+## Quickstart
+
+```bash
+uv run python convert.py          # HF Hub → MLX-native safetensors (~5s)
+uv run just                        # lint + typecheck + dep enforcement + tests
+```
+
+```python
+from canvit_mlx import load_canvit, Viewpoint, extract_glimpse_at_viewpoint
+
+model = load_canvit("weights/canvit-vitb16-pretrain-512px-in21k.safetensors")
+state = model.init_state(batch_size=1, canvas_grid_size=32)
+vp = Viewpoint.full_scene(batch_size=1)
+glimpse = extract_glimpse_at_viewpoint(image, vp, glimpse_size_px=128)
+output = model(glimpse, state, vp)
+```
+
+## Module tree
+
+```
+{{MODULE_TREE}}
+```
+
+## License
+
+[MIT](LICENSE)

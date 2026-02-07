@@ -3,7 +3,9 @@ name = "canvit-mlx"
 version = "0.1.0"
 description = "CanViT inference on Apple Silicon via MLX"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.12"
+authors = [{ name = "Yohaï-Eliel Berreby", email = "me@yberreby.com" }]
 dependencies = [
     "mlx>=0.30.6",
     "numpy>=2.2.0,<2.4.0",
