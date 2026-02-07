@@ -27,7 +27,7 @@ class TestSampleAtViewpoint:
         from conftest import pt_sample, pt_viewpoint
 
         vp_pt = pt_viewpoint(vp_centers, vp_scales)
-        ref = pt_sample(None, img_pt, vp_pt, glimpse_px)
+        ref = pt_sample(img_pt, vp_pt, glimpse_px)
 
         img_mlx = mx.array(img_pt.numpy().transpose(0, 2, 3, 1))
         vp_mlx = Viewpoint(centers=mx.array(vp_centers), scales=mx.array(vp_scales))

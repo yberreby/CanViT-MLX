@@ -1,5 +1,6 @@
 """CanViT: DINOv3 ViT-B/16 backbone with canvas cross-attention."""
 
+import logging
 import math
 from dataclasses import dataclass
 
@@ -9,6 +10,8 @@ import mlx.nn as nn
 from ..coords import Viewpoint, canvas_coords_for_glimpse, grid_coords, sample_at_viewpoint
 from ..rope import apply_with_prefix, compute_rope, make_rope_periods
 
+log = logging.getLogger(__name__)
+
 
 # ---------------------------------------------------------------------------
 # Config & output types
@@ -16,18 +19,19 @@ from ..rope import apply_with_prefix, compute_rope, make_rope_periods
 
 @dataclass
 class CanViTConfig:
-    embed_dim: int = 768
-    num_heads: int = 12
-    n_blocks: int = 12
-    patch_size: int = 16
-    ffn_ratio: float = 4.0
-    n_register_tokens: int = 4
-    rw_stride: int = 2
-    n_canvas_registers: int = 16
-    canvas_num_heads: int = 8
-    canvas_head_dim: int = 128
-    enable_vpe: bool = True
-    teacher_dim: int = 768
+    embed_dim: int
+    num_heads: int
+    n_blocks: int
+    patch_size: int
+    ffn_ratio: float
+    n_register_tokens: int
+    rw_stride: int
+    n_canvas_registers: int
+    canvas_num_heads: int
+    canvas_head_dim: int
+    enable_vpe: bool
+    teacher_dim: int
+    std_grid_size: int
 
     @property
     def canvas_dim(self) -> int:
@@ -35,6 +39,8 @@ class CanViTConfig:
 
     @property
     def head_dim(self) -> int:
+        assert self.embed_dim % self.num_heads == 0, (
+            f"embed_dim ({self.embed_dim}) must be divisible by num_heads ({self.num_heads})")
         return self.embed_dim // self.num_heads
 
 
@@ -98,6 +104,7 @@ class MLP(nn.Module):
 class SelfAttention(nn.Module):
     def __init__(self, dim: int, num_heads: int):
         super().__init__()
+        assert dim % num_heads == 0, f"dim ({dim}) must be divisible by num_heads ({num_heads})"
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
         self.scale = self.head_dim ** -0.5
@@ -115,7 +122,7 @@ class SelfAttention(nn.Module):
 
 
 class ViTBlock(nn.Module):
-    def __init__(self, dim: int, num_heads: int, ffn_ratio: float = 4.0):
+    def __init__(self, dim: int, num_heads: int, ffn_ratio: float):
         super().__init__()
         self.norm1 = nn.LayerNorm(dim)
         self.attn = SelfAttention(dim, num_heads)
@@ -135,6 +142,7 @@ class ViTBlock(nn.Module):
 
 def _to_mh(x: mx.array, h: int) -> mx.array:
     B, N, D = x.shape
+    assert D % h == 0, f"dim ({D}) must be divisible by num_heads ({h})"
     return x.reshape(B, N, h, D // h).transpose(0, 2, 1, 3)
 
 def _from_mh(x: mx.array) -> mx.array:
@@ -146,6 +154,7 @@ class CanvasReadAttention(nn.Module):
     """Local queries canvas. Dense projections on local side only."""
     def __init__(self, local_dim: int, canvas_dim: int, num_heads: int):
         super().__init__()
+        assert canvas_dim % num_heads == 0
         self.num_heads = num_heads
         self.scale = (canvas_dim // num_heads) ** -0.5
         self.pre_q_ln = nn.LayerNorm(local_dim)
@@ -166,6 +175,7 @@ class CanvasWriteAttention(nn.Module):
     """Canvas queries local. Dense projections on local side only."""
     def __init__(self, local_dim: int, canvas_dim: int, num_heads: int):
         super().__init__()
+        assert canvas_dim % num_heads == 0
         self.num_heads = num_heads
         self.scale = (canvas_dim // num_heads) ** -0.5
         self.pre_q_ln = nn.LayerNorm(canvas_dim)
@@ -260,10 +270,14 @@ class CanViT(nn.Module):
         self.scene_cls_ln = nn.LayerNorm(cfg.embed_dim)
         self.scene_cls_proj = nn.Linear(cfg.embed_dim, cfg.teacher_dim)
 
+        n_spatial = cfg.std_grid_size ** 2
         self.cls_std_mean = mx.zeros((1, cfg.teacher_dim))
         self.cls_std_var = mx.ones((1, cfg.teacher_dim))
-        self.scene_std_mean = mx.zeros((1024, cfg.teacher_dim))
-        self.scene_std_var = mx.ones((1024, cfg.teacher_dim))
+        self.scene_std_mean = mx.zeros((n_spatial, cfg.teacher_dim))
+        self.scene_std_var = mx.ones((n_spatial, cfg.teacher_dim))
+
+        log.info("CanViT: %d blocks, read_after=%s, write_after=%s, vpe=%s",
+                 cfg.n_blocks, read_after, write_after, cfg.enable_vpe)
 
     def init_state(self, batch_size: int, canvas_grid_size: int) -> RecurrentState:
         cfg = self.cfg
@@ -281,6 +295,9 @@ class CanViT(nn.Module):
         canvas = state.canvas
         patches, H, W = self.patch_embed(glimpse)
 
+        n_prefix = (1 if self.vpe_encoder is not None else 0) + 2 + cfg.n_register_tokens
+        expected_local = n_prefix + H * W
+
         parts: list[mx.array] = []
         if self.vpe_encoder is not None:
             vpe = self.vpe_encoder(viewpoint.centers[:, 0], viewpoint.centers[:, 1], viewpoint.scales)
@@ -290,12 +307,15 @@ class CanViT(nn.Module):
                        mx.broadcast_to(self.storage_tokens, (B, cfg.n_register_tokens, cfg.embed_dim)),
                        patches])
         local = mx.concatenate(parts, axis=1)
+        assert local.shape[1] == expected_local, (
+            f"token packing: expected {expected_local}, got {local.shape[1]}")
 
         local_pos = canvas_coords_for_glimpse(viewpoint.centers, viewpoint.scales, H, W)
         bb_sin, bb_cos = compute_rope(local_pos, make_rope_periods(cfg.head_dim))
         ca_sin, ca_cos = compute_rope(local_pos, make_rope_periods(cfg.canvas_head_dim))
         n_cs = canvas.shape[1] - cfg.n_canvas_registers
         cg = int(math.sqrt(n_cs))
+        assert cg * cg == n_cs, f"canvas spatial tokens ({n_cs}) must be a perfect square"
         sp = mx.broadcast_to(grid_coords(cg, cg).reshape(1, -1, 2), (B, n_cs, 2))
         c_sin, c_cos = compute_rope(sp, make_rope_periods(cfg.canvas_head_dim))
 

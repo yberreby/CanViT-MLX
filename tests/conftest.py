@@ -69,7 +69,7 @@ def pt_recurrent_state(canvas: np.ndarray, recurrent_cls: np.ndarray):
     return RecurrentState(canvas=torch.tensor(canvas), recurrent_cls=torch.tensor(recurrent_cls))
 
 
-def pt_sample(model, img_pt: torch.Tensor, viewpoint_pt, glimpse_px: int) -> np.ndarray:
+def pt_sample(img_pt: torch.Tensor, viewpoint_pt, glimpse_px: int) -> np.ndarray:
     from canvit.viewpoint import sample_at_viewpoint
     out = sample_at_viewpoint(spatial=img_pt, viewpoint=viewpoint_pt, glimpse_size_px=glimpse_px)
     return out.numpy().transpose(0, 2, 3, 1)  # NCHW -> NHWC
