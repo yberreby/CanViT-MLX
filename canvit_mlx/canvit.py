@@ -1,4 +1,4 @@
-__all__ = ["RecurrentState", "CanViTOutput", "compute_rw_positions", "CanViT"]
+__all__ = ["RecurrentState", "CanViTOutput", "CanViT"]
 
 import logging
 import math
