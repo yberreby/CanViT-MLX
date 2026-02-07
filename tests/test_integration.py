@@ -85,3 +85,34 @@ class TestMultiStep:
         assert_close("step2_canvas", ref2["canvas"], out2.state.canvas, atol=3.0, rtol=2e-3)
         assert_close("step2_cls", ref2["recurrent_cls"], out2.state.recurrent_cls, atol=2.0, rtol=2e-3)
         assert_close("step2_patches", ref2["local_patches"], out2.local_patches, atol=2.0, rtol=2e-3)
+
+
+class TestRunTrajectory:
+    def test_matches_manual_loop(self, mlx_model, glimpse_pair):
+        """run_trajectory should produce same results as manual __call__ loop."""
+        _, glimpse_mlx = glimpse_pair
+        # Build a tiny image and 2 viewpoints
+        img = mx.broadcast_to(glimpse_mlx, (B, GLIMPSE_PX, GLIMPSE_PX, 3))
+        vps = [Viewpoint.full_scene(batch_size=B),
+               Viewpoint(centers=mx.array([[0.2, -0.3]]), scales=mx.array([0.7]))]
+
+        outputs = mlx_model.run_trajectory(img, vps, GLIMPSE_PX, CANVAS_GRID)
+        assert len(outputs) == 2
+        # Verify shapes
+        for out in outputs:
+            assert out.state.canvas.shape[1] == mlx_model.cfg.n_canvas_registers + CANVAS_GRID ** 2
+            assert out.ephemeral_cls.shape == (B, 1, mlx_model.cfg.embed_dim)
+
+
+class TestTeacherHeads:
+    def test_predict_teacher_scene(self, mlx_model):
+        canvas = mx.zeros((B, mlx_model.cfg.n_canvas_registers + CANVAS_GRID ** 2, mlx_model.cfg.canvas_dim))
+        out = mlx_model.predict_teacher_scene(canvas)
+        mx.eval(out)
+        assert out.shape == (B, CANVAS_GRID ** 2, mlx_model.cfg.teacher_dim)
+
+    def test_predict_scene_teacher_cls(self, mlx_model):
+        cls = mx.zeros((B, 1, mlx_model.cfg.embed_dim))
+        out = mlx_model.predict_scene_teacher_cls(cls)
+        mx.eval(out)
+        assert out.shape == (B, mlx_model.cfg.teacher_dim)

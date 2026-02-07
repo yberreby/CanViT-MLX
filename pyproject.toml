@@ -20,6 +20,7 @@ dev = [
     "matplotlib>=3.10.8",
     "pypatree>=0.2.0",
     "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
     "scikit-learn>=1.8.0",
     "torch>=2.0",
     "tyro>=1.0.6",
@@ -27,6 +28,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = "--cov=canvit_mlx --cov-report=term-missing"
 log_cli = true
 log_cli_level = "INFO"
 
