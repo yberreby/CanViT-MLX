@@ -113,13 +113,19 @@ class CanViT(nn.Module):
             f"token packing: expected {expected_local}, got {local.shape[1]}")
 
         local_pos = canvas_coords_for_glimpse(viewpoint.centers, viewpoint.scales, H, W)
+        # RoPE: compute in f32 for precision, cast once to working dtype.
+        # apply_rope_with_prefix assumes sin/cos already match Q/K dtype.
+        dtype = patches.dtype
         bb_sin, bb_cos = compute_rope(local_pos, make_rope_periods(cfg.head_dim))
+        bb_sin, bb_cos = bb_sin.astype(dtype), bb_cos.astype(dtype)
         ca_sin, ca_cos = compute_rope(local_pos, make_rope_periods(cfg.canvas_head_dim))
+        ca_sin, ca_cos = ca_sin.astype(dtype), ca_cos.astype(dtype)
         n_cs = canvas.shape[1] - cfg.n_canvas_registers
         cg = int(math.sqrt(n_cs))
         assert cg * cg == n_cs, f"canvas spatial tokens ({n_cs}) must be a perfect square"
         sp = mx.broadcast_to(grid_coords(cg, cg).reshape(1, -1, 2), (B, n_cs, 2))
         c_sin, c_cos = compute_rope(sp, make_rope_periods(cfg.canvas_head_dim))
+        c_sin, c_cos = c_sin.astype(dtype), c_cos.astype(dtype)
 
         ri, wi = 0, 0
         for bi in range(cfg.n_blocks):

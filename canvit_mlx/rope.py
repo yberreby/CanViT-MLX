@@ -16,7 +16,7 @@ def make_rope_periods(head_dim: int, base: float = 100.0) -> mx.array:
 def compute_rope(positions: mx.array, periods: mx.array) -> tuple[mx.array, mx.array]:
     """positions: [B, N, 2], periods: [n_freqs] -> sin, cos each [B, 1, N, head_dim]."""
     assert positions.ndim == 3 and positions.shape[2] == 2, f"expected [B, N, 2], got {positions.shape}"
-    angles = 2 * math.pi * mx.expand_dims(positions, -1) / periods
+    angles = 2 * math.pi * mx.expand_dims(positions, -1) / periods.astype(positions.dtype)
     B, N = angles.shape[:2]
     angles = mx.concatenate([angles.reshape(B, N, -1)] * 2, axis=-1)
     return mx.expand_dims(mx.sin(angles), 1), mx.expand_dims(mx.cos(angles), 1)
