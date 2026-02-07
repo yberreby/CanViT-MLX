@@ -10,7 +10,7 @@ import torch
 log = logging.getLogger(__name__)
 
 HF_REPO = "canvit/canvit-vitb16-pretrain-512px-in21k"
-WEIGHTS = "weights.safetensors"
+WEIGHTS = "weights/canvit-vitb16.safetensors"
 SEED = 42
 B = 1
 CANVAS_GRID = 32

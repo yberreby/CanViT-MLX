@@ -1,8 +1,11 @@
-"""Convert CanViT from HuggingFace Hub to MLX-compatible safetensors.
+"""Convert CanViT HF Hub weights to safetensors with Conv2d pre-permuted for MLX.
+
+The output .safetensors keeps PyTorch key names; load_canvit() handles remapping.
+Only transform: Conv2d patch_embed weight [O,I,H,W] → [O,H,W,I].
 
 Usage:
     uv run python convert.py
-    uv run python convert.py --repo canvit/canvit-vitb16-pretrain-512px-in21k --out weights.safetensors
+    uv run python convert.py --out /path/to/canvit-vitb16.safetensors
 """
 
 import json
@@ -17,12 +20,13 @@ from safetensors.torch import save_file
 log = logging.getLogger(__name__)
 
 HF_REPO = "canvit/canvit-vitb16-pretrain-512px-in21k"
+DEFAULT_OUT = Path("weights/canvit-vitb16.safetensors")
 
 
 @dataclass
 class Args:
     repo: str = HF_REPO
-    out: Path = Path("weights.safetensors")
+    out: Path = DEFAULT_OUT
 
 
 def convert(args: Args) -> None:
@@ -31,19 +35,16 @@ def convert(args: Args) -> None:
     log.info("Loading from HuggingFace: %s", args.repo)
     model = CanViTForPretrainingHFHub.from_pretrained(args.repo)
     sd = model.state_dict()
-
     log.info("State dict: %d keys", len(sd))
 
     out: dict[str, torch.Tensor] = {}
     for key, val in sd.items():
         val = val.to(torch.float32).contiguous()
-
-        # MLX Conv2d expects [out_channels, kH, kW, in_channels]
         if key == "backbone.vit.patch_embed.proj.weight":
             val = val.permute(0, 2, 3, 1).contiguous()
-
         out[key] = val
 
+    args.out.parent.mkdir(parents=True, exist_ok=True)
     save_file(out, str(args.out))
     total = sum(v.numel() for v in out.values()) / 1e6
     log.info("Saved %d tensors (%.1fM params) to %s", len(out), total, args.out)

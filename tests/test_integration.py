@@ -6,7 +6,7 @@ Tests run the full forward path (raw glimpse → all outputs) and multi-step rec
 import mlx.core as mx
 import torch
 
-from canvit_mlx import RecurrentState, Viewpoint, load_canvit
+from canvit_mlx import RecurrentState, Viewpoint
 from conftest import (
     assert_close, pt_forward, pt_recurrent_state, pt_viewpoint, pt_viewpoint_full,
     B, CANVAS_GRID, GLIMPSE_PX, SEED,

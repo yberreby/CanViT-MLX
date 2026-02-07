@@ -1,8 +1,5 @@
 """Weight loading tests."""
 
-from conftest import WEIGHTS
-
-
 class TestLoadCanvit:
     def test_loads_and_has_correct_config(self, mlx_model):
         cfg = mlx_model.cfg

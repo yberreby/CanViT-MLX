@@ -16,11 +16,13 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "basedpyright>=1.37.4",
     "canvit",
     "matplotlib>=3.10.8",
     "pypatree>=0.2.0",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
+    "ruff>=0.15.0",
     "scikit-learn>=1.8.0",
     "torch>=2.0",
     "tyro>=1.0.6",
@@ -31,6 +33,17 @@ testpaths = ["tests"]
 addopts = "--cov=canvit_mlx --cov-report=term-missing"
 log_cli = true
 log_cli_level = "INFO"
+
+[tool.basedpyright]
+reportMissingModuleSource = false
+reportMissingTypeStubs = false
+reportUnknownMemberType = false
+reportUnknownVariableType = false
+reportUnknownArgumentType = false
+reportUnannotatedClassAttribute = false
+reportImplicitOverride = false
+reportUnusedCallResult = false
+reportAny = false
 
 [tool.uv.sources]
 canvit = { git = "ssh://git@github.com/yberreby/CanViT.git" }

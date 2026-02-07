@@ -59,8 +59,8 @@ RoPE values from PyTorch, masking the bug. The isolated RoPE test caught it.
 **Lesson**: ALWAYS verify coordinate conventions independently. MLX ≠ PyTorch defaults.
 
 ### Issues / Potential Pitfalls
-- `sample_at_viewpoint` uses `F.grid_sample` which MLX doesn't have — hand-rolled bilinear
-  interpolation. NOT YET VERIFIED against PyTorch output.
+- `sample_at_viewpoint`: hand-rolled bilinear interpolation matching F.grid_sample(align_corners=False).
+  VERIFIED against PyTorch for full-scene and off-center viewpoints (atol=1e-4).
 - Standardizers are grid-size-specific (keyed by "32"). Only grid_size=32 supported.
 
 ### RoPE equivalence (VERIFIED)
@@ -70,3 +70,28 @@ The two RoPE styles are **mathematically identical** (numerically verified, max 
 
 Same rotation, different expression. The CanViT version avoids the `rotate_half` intermediate
 allocation, saving one full-tensor copy — matters for the canvas token stream (memory bandwidth bound).
+
+## 2026-02-07: Restructuring
+
+### Package structure
+Restructured from monolithic `canvit_mlx.py` (789 lines) to proper hatchling package:
+- `canvit_mlx/` — 5 submodules (coords, model, rope, weights, __init__), zero canvit dependency
+- `tests/` — separate directory, only place that imports canvit (PyTorch reference)
+- `convert.py` — outputs to `weights/canvit-vitb16.safetensors` (not cwd)
+
+### Tooling
+- `just` default rule: lint (ruff) → typecheck (basedpyright) → enforce no-canvit-dep → test (pytest)
+- `pytest-cov` enabled by default — 100% coverage (339 stmts)
+- Dependency enforcement: `just no-canvit-dep` greps canvit_mlx/ for canvit imports, fails if found
+- `pypatree` for API review
+
+### End-to-end verification
+22 tests covering:
+- Unit: RoPE, coordinates, sampling, patch embed, VPE, init state, R/W schedule, weight loading
+- Integration: full-scene E2E, off-center viewpoint, 2-step recurrence, run_trajectory, teacher heads
+- Infrastructure: convert.py produces loadable weights
+
+### Tolerance justification
+f32 SDPA accumulation error grows with sequence length (~1040 tokens for canvas).
+Canvas values reach ~2600 magnitude, giving occasional absolute errors ~3-4 (relative ~0.15%).
+Canvas atol=5.0 is justified; other outputs atol=1.0-2.0 with rtol=1e-3 to 2e-3.

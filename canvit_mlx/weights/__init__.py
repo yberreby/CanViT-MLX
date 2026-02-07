@@ -54,7 +54,8 @@ def _map_key(pt_key: str) -> str | None:
         ("backbone.vit.cls_token", "cls_token"),
         ("backbone.vit.storage_tokens", "storage_tokens"),
     ]:
-        if k == old: return new
+        if k == old:
+            return new
 
     for prefix, target in [
         ("cls_standardizers.32.mean", "cls_std_mean"),
@@ -62,6 +63,7 @@ def _map_key(pt_key: str) -> str | None:
         ("scene_standardizers.32.mean", "scene_std_mean"),
         ("scene_standardizers.32.var", "scene_std_var"),
     ]:
-        if k.startswith(prefix): return target
+        if k.startswith(prefix):
+            return target
 
     return k

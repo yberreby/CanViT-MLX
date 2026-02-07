@@ -4,7 +4,6 @@ import math
 from dataclasses import dataclass
 
 import mlx.core as mx
-import mlx.core.fast
 import mlx.nn as nn
 
 from ..coords import Viewpoint, canvas_coords_for_glimpse, grid_coords, sample_at_viewpoint
@@ -313,8 +312,10 @@ class CanViT(nn.Module):
                 wi += 1
 
         idx = (1 if self.vpe_encoder is not None else 0)
-        new_cls = local[:, idx:idx + 1]; idx += 1
-        new_eph = local[:, idx:idx + 1]; idx += 1 + cfg.n_register_tokens
+        new_cls = local[:, idx:idx + 1]
+        idx += 1
+        new_eph = local[:, idx:idx + 1]
+        idx += 1 + cfg.n_register_tokens
         return CanViTOutput(
             state=RecurrentState(canvas=canvas, recurrent_cls=new_cls),
             ephemeral_cls=new_eph,

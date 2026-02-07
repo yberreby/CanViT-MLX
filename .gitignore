@@ -10,8 +10,8 @@ wheels/
 .venv
 
 # Artifacts (generated, not committed)
-weights.safetensors
-weights.json
+weights/
 *.npy
+.coverage
 .pytest_cache/
 outputs/

@@ -5,7 +5,7 @@ import numpy as np
 
 from canvit_mlx.rope import compute_rope, make_rope_periods
 from canvit_mlx.coords import grid_coords
-from conftest import assert_close, CANVAS_GRID
+from conftest import assert_close
 
 
 class TestPeriods:
