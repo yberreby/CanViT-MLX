@@ -39,15 +39,11 @@ def _map_key(pt_key: str) -> str | None:
         return None
     if pt_key == "backbone.vit.mask_token":
         return None
-    # rope_embed: only keep periods, renamed
-    if pt_key.startswith("backbone.vit.rope_embed."):
-        if pt_key == "backbone.vit.rope_embed.periods":
-            return "rope_periods_backbone"
+    if pt_key.startswith("backbone.vit.rope_embed.") or pt_key.startswith("backbone.vit.norm."):
         return None
 
     k = pt_key
     k = k.replace("backbone.vit.patch_embed.proj.", "patch_embed.proj.")
-    k = k.replace("backbone.vit.norm.", "backbone_norm.")
     k = k.replace("backbone.vit.blocks.", "blocks.")
     k = k.replace("vpe_encoder.B", "vpe_encoder.B_mat")
     k = k.replace("scene_patches_head.0.", "scene_patches_ln.")
@@ -104,7 +100,7 @@ def convert(args: Args) -> None:
         "model_config": {
             k: getattr(model.cfg, k)
             for k in ["rw_stride", "n_canvas_registers", "canvas_num_heads",
-                       "canvas_head_dim", "canvas_read_layer_scale_init", "enable_vpe", "teacher_dim"]
+                       "canvas_head_dim", "enable_vpe", "teacher_dim"]
         },
         "backbone_name": model.backbone_name,
         "grid_sizes": model.grid_sizes,

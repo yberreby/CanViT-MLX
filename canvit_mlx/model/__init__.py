@@ -241,7 +241,6 @@ class CanViT(nn.Module):
         self.patch_embed = PatchEmbed(cfg.patch_size, cfg.embed_dim)
         self.cls_token = mx.zeros((1, 1, cfg.embed_dim))
         self.storage_tokens = mx.zeros((1, cfg.n_register_tokens, cfg.embed_dim))
-        self.backbone_norm = nn.LayerNorm(cfg.embed_dim)  # loaded but unused by CanViT
         self.blocks = [ViTBlock(cfg.embed_dim, cfg.num_heads, cfg.ffn_ratio) for _ in range(cfg.n_blocks)]
 
         read_after, write_after = compute_rw_positions(cfg.n_blocks, cfg.rw_stride)
@@ -265,7 +264,6 @@ class CanViT(nn.Module):
         self.cls_std_var = mx.ones((1, cfg.teacher_dim))
         self.scene_std_mean = mx.zeros((1024, cfg.teacher_dim))
         self.scene_std_var = mx.ones((1024, cfg.teacher_dim))
-        self.rope_periods_backbone = mx.zeros((cfg.head_dim // 4,))  # loaded but unused
 
     def init_state(self, batch_size: int, canvas_grid_size: int) -> RecurrentState:
         cfg = self.cfg
