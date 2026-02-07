@@ -15,3 +15,9 @@ wheels/
 .coverage
 .pytest_cache/
 outputs/
+
+# Bench outputs (timestamped, regenerated)
+bench/*.parquet
+bench/*.json
+bench/*.png
+bench/*.svg

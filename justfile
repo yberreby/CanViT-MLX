@@ -22,5 +22,13 @@ test:
 convert:
     uv run python convert.py
 
+bench *GRIDS: run-bench plot-bench
+
+run-bench *GRIDS:
+    uv run python bench/run.py {{GRIDS}}
+
+plot-bench:
+    uv run python bench/plot.py
+
 tree:
     uv run pypatree canvit_mlx
