@@ -10,7 +10,8 @@ import torch
 log = logging.getLogger(__name__)
 
 HF_REPO = "canvit/canvit-vitb16-pretrain-512px-in21k"
-WEIGHTS = "weights/canvit-vitb16.safetensors"
+_MODEL_NAME = HF_REPO.split("/")[-1]  # org/model → model
+WEIGHTS = f"weights/{_MODEL_NAME}.safetensors"
 SEED = 42
 B = 1
 CANVAS_GRID = 32

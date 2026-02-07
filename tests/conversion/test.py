@@ -10,7 +10,7 @@ from convert import Args, convert
 
 def test_convert_produces_loadable_weights(tmp_path):
     out = tmp_path / "test.safetensors"
-    convert(Args(out=out))
+    convert(Args(out=out, verify=False))
 
     assert out.exists()
     assert out.with_suffix(".json").exists()

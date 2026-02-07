@@ -6,13 +6,13 @@ single forward pass against the PyTorch reference.
 
 Usage:
     uv run python convert.py
-    uv run python convert.py --out /path/to/canvit-vitb16.safetensors
+    uv run python convert.py --out /path/to/output.safetensors
     uv run python convert.py --no-verify
 """
 
 import json
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 from pathlib import Path
 
 import numpy as np
@@ -23,7 +23,7 @@ from safetensors.torch import save_file
 log = logging.getLogger(__name__)
 
 HF_REPO = "canvit/canvit-vitb16-pretrain-512px-in21k"
-DEFAULT_OUT = Path("weights/canvit-vitb16.safetensors")
+WEIGHTS_DIR = Path("weights")
 
 VERIFY_SEED = 42
 VERIFY_GLIMPSE_PX = 128
@@ -31,10 +31,19 @@ VERIFY_ATOL = 5.0   # f32 SDPA accumulation over ~1040 tokens
 VERIFY_RTOL = 2e-3
 
 
+def _repo_model_name(repo: str) -> str:
+    """'org/model-name' → 'model-name'"""
+    return repo.split("/")[-1]
+
+
+def _default_out(repo: str) -> Path:
+    return WEIGHTS_DIR / f"{_repo_model_name(repo)}.safetensors"
+
+
 @dataclass
 class Args:
     repo: str = HF_REPO
-    out: Path = DEFAULT_OUT
+    out: Path | None = None
     verify: bool = True
 
 
@@ -196,8 +205,10 @@ def _verify(pt_model, weights_path: str, grid_size: int) -> None:
 
 def convert(args: Args) -> None:
     from canvit import CanViTForPretrainingHFHub
+    from canvit_mlx.model import CanViTConfig
 
-    log.info("=== CanViT conversion: %s → %s ===", args.repo, args.out)
+    out = args.out or _default_out(args.repo)
+    log.info("=== CanViT conversion: %s → %s ===", args.repo, out)
 
     pt_model = CanViTForPretrainingHFHub.from_pretrained(args.repo)
     sd = pt_model.state_dict()
@@ -209,20 +220,24 @@ def convert(args: Args) -> None:
 
     weights = _remap_state_dict(sd, _make_key_mapper(grid_size))
 
-    args.out.parent.mkdir(parents=True, exist_ok=True)
-    save_file(weights, str(args.out))
-    log.info("Saved weights → %s", args.out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    save_file(weights, str(out))
+    log.info("Saved weights → %s", out)
 
     config = _extract_config(pt_model)
+    expected_keys = {f.name for f in fields(CanViTConfig)}
+    assert set(config) == expected_keys, (
+        f"config key mismatch: extra={set(config) - expected_keys}, missing={expected_keys - set(config)}")
+
     meta = {"hf_repo": args.repo, "model_config": config, "backbone_name": pt_model.backbone_name}
-    meta_path = args.out.with_suffix(".json")
+    meta_path = out.with_suffix(".json")
     meta_path.write_text(json.dumps(meta, indent=2))
     log.info("Saved metadata → %s", meta_path)
     for k, v in config.items():
         log.info("  %-20s %s", k, v)
 
     if args.verify:
-        _verify(pt_model, str(args.out), grid_size)
+        _verify(pt_model, str(out), grid_size)
     else:
         log.warning("Skipping verification (--no-verify)")
 
