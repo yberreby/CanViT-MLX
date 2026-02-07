@@ -22,10 +22,10 @@ test:
 convert:
     uv run python convert.py
 
-bench *GRIDS: run-bench plot-bench
+bench *ARGS: (run-bench ARGS) plot-bench
 
-run-bench *GRIDS:
-    uv run python bench/run.py {{GRIDS}}
+run-bench *ARGS:
+    uv run python bench/run.py {{ARGS}}
 
 plot-bench:
     uv run python bench/plot.py
