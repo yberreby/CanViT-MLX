@@ -1,3 +1,5 @@
+"""2D Rotary Position Embeddings."""
+
 __all__ = ["make_rope_periods", "compute_rope", "apply_rope_with_prefix"]
 
 import math

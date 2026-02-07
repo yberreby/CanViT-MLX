@@ -1,3 +1,5 @@
+"""CanViT model: recurrent vision transformer with canvas memory."""
+
 __all__ = ["RecurrentState", "CanViTOutput", "CanViT"]
 
 import logging
@@ -34,7 +36,7 @@ class CanViTOutput:
     local_patches: mx.array   # [B, H*W, embed_dim]
 
 
-def compute_rw_positions(n_blocks: int, rw_stride: int) -> tuple[list[int], list[int]]:
+def _compute_rw_positions(n_blocks: int, rw_stride: int) -> tuple[list[int], list[int]]:
     read_after, write_after = [], []
     for i, pos in enumerate(range(rw_stride - 1, n_blocks, rw_stride)):
         (read_after if i % 2 == 0 else write_after).append(pos)
@@ -52,7 +54,7 @@ class CanViT(nn.Module):
         self.storage_tokens = mx.zeros((1, cfg.n_register_tokens, cfg.embed_dim))
         self.blocks = [ViTBlock(cfg.embed_dim, cfg.num_heads, cfg.ffn_ratio) for _ in range(cfg.n_blocks)]
 
-        read_after, write_after = compute_rw_positions(cfg.n_blocks, cfg.rw_stride)
+        read_after, write_after = _compute_rw_positions(cfg.n_blocks, cfg.rw_stride)
         self.read_after_blocks = read_after
         self.write_after_blocks = write_after
         self.read_attn = [CanvasReadAttention(cfg.embed_dim, cfg.canvas_dim, cfg.canvas_num_heads) for _ in read_after]

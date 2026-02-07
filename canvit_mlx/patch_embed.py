@@ -1,3 +1,5 @@
+"""Image-to-patch-tokens via strided convolution."""
+
 __all__ = ["PatchEmbed"]
 
 import mlx.core as mx

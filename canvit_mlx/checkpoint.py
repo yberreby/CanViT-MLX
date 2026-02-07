@@ -1,3 +1,5 @@
+"""Load a CanViT model from safetensors checkpoint."""
+
 __all__ = ["load_canvit"]
 
 import json

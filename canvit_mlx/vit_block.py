@@ -1,3 +1,5 @@
+"""ViT transformer block: self-attention + MLP with LayerScale."""
+
 __all__ = ["ViTBlock"]
 
 import mlx.core as mx

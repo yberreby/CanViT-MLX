@@ -1,3 +1,5 @@
+"""Viewpoint: where the model is looking (center + scale)."""
+
 __all__ = ["Viewpoint"]
 
 from dataclasses import dataclass

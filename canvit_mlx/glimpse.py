@@ -1,3 +1,5 @@
+"""Bilinear glimpse extraction from an image at a given viewpoint."""
+
 __all__ = ["extract_glimpse_at_viewpoint"]
 
 import mlx.core as mx

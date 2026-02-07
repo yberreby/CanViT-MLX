@@ -1,3 +1,5 @@
+"""Model hyperparameters and architecture configuration."""
+
 __all__ = ["CanViTConfig"]
 
 from dataclasses import dataclass

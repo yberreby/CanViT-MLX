@@ -1,3 +1,5 @@
+"""Normalized coordinate grids in [-1, 1], (y, x) order."""
+
 __all__ = ["grid_coords", "canvas_coords_for_glimpse"]
 
 import mlx.core as mx

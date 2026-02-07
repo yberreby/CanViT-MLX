@@ -1,3 +1,5 @@
+"""Canvas cross-attention: local reads from / writes to the persistent canvas."""
+
 __all__ = ["CanvasReadAttention", "CanvasWriteAttention"]
 
 import mlx.core as mx

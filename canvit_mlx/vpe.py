@@ -1,3 +1,5 @@
+"""Viewpoint Position Encoding via random Fourier features."""
+
 __all__ = ["VPEEncoder"]
 
 import mlx.core as mx

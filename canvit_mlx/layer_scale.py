@@ -1,3 +1,5 @@
+"""Per-channel learned scaling."""
+
 __all__ = ["LayerScale"]
 
 import mlx.core as mx
