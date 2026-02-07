@@ -5,22 +5,28 @@ description = "CanViT inference on Apple Silicon via MLX"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "canvit",
-    "matplotlib>=3.10.8",
     "mlx>=0.30.6",
     "numpy>=2.2.0,<2.4.0",
     "safetensors>=0.7.0",
-    "scikit-learn>=1.8.0",
-    "tyro>=1.0.6",
 ]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
+    "canvit",
+    "matplotlib>=3.10.8",
+    "pypatree>=0.2.0",
     "pytest>=9.0.2",
+    "scikit-learn>=1.8.0",
+    "torch>=2.0",
+    "tyro>=1.0.6",
 ]
 
 [tool.pytest.ini_options]
-python_files = ["test_*.py"]
+testpaths = ["tests"]
 log_cli = true
 log_cli_level = "INFO"
 
