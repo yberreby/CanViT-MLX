@@ -8,14 +8,23 @@ exclude = ["tests/**", "convert.py", "throwaway/**"]
 [[modules]]
 path = "canvit_mlx"
 depends_on = [
-    "canvit_mlx.coords",
-    "canvit_mlx.rope",
-    "canvit_mlx.model",
-    "canvit_mlx.weights",
+    "canvit_mlx.config",
+    "canvit_mlx.viewpoint",
+    "canvit_mlx.glimpse",
+    "canvit_mlx.canvit",
+    "canvit_mlx.checkpoint",
 ]
 
 [[modules]]
-path = "canvit_mlx.coords"
+path = "canvit_mlx.config"
+depends_on = []
+
+[[modules]]
+path = "canvit_mlx.viewpoint"
+depends_on = []
+
+[[modules]]
+path = "canvit_mlx.grid"
 depends_on = []
 
 [[modules]]
@@ -23,27 +32,44 @@ path = "canvit_mlx.rope"
 depends_on = []
 
 [[modules]]
-path = "canvit_mlx.model"
-depends_on = ["canvit_mlx.coords", "canvit_mlx.rope"]
+path = "canvit_mlx.layer_scale"
+depends_on = []
 
 [[modules]]
-path = "canvit_mlx.weights"
-depends_on = ["canvit_mlx.model"]
+path = "canvit_mlx.patch_embed"
+depends_on = []
 
-# --- Interfaces (what each module exposes) ---
+[[modules]]
+path = "canvit_mlx.vpe"
+depends_on = []
 
-[[interfaces]]
-from = ["canvit_mlx.coords"]
-expose = ["Viewpoint", "grid_coords", "sample_at_viewpoint", "canvas_coords_for_glimpse"]
+[[modules]]
+path = "canvit_mlx.glimpse"
+depends_on = ["canvit_mlx.grid", "canvit_mlx.viewpoint"]
 
-[[interfaces]]
-from = ["canvit_mlx.rope"]
-expose = ["compute_rope", "make_rope_periods", "apply_with_prefix"]
+[[modules]]
+path = "canvit_mlx.vit_block"
+depends_on = ["canvit_mlx.rope", "canvit_mlx.layer_scale"]
 
-[[interfaces]]
-from = ["canvit_mlx.model"]
-expose = ["CanViT", "CanViTConfig", "CanViTOutput", "RecurrentState", "compute_rw_positions"]
+[[modules]]
+path = "canvit_mlx.canvas_attention"
+depends_on = ["canvit_mlx.rope"]
 
-[[interfaces]]
-from = ["canvit_mlx.weights"]
-expose = ["load_canvit"]
+[[modules]]
+path = "canvit_mlx.canvit"
+depends_on = [
+    "canvit_mlx.vit_block",
+    "canvit_mlx.canvas_attention",
+    "canvit_mlx.config",
+    "canvit_mlx.grid",
+    "canvit_mlx.layer_scale",
+    "canvit_mlx.patch_embed",
+    "canvit_mlx.rope",
+    "canvit_mlx.glimpse",
+    "canvit_mlx.viewpoint",
+    "canvit_mlx.vpe",
+]
+
+[[modules]]
+path = "canvit_mlx.checkpoint"
+depends_on = ["canvit_mlx.canvit", "canvit_mlx.config"]

@@ -100,6 +100,49 @@ def _make_key_mapper(grid_size: int):
 # Weight remapping
 # ---------------------------------------------------------------------------
 
+def _fuse_reparam_layer_scales(sd: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    """Fuse init_scale + delta_scale → gamma for ReparamLayerScale instances.
+
+    read_attn.N.scale.{init_scale,delta_scale} → read_scales.N.gamma
+    """
+    out: dict[str, torch.Tensor] = {}
+    consumed: set[str] = set()
+    for key in sd:
+        if key.endswith(".scale.init_scale"):
+            prefix = key.removesuffix(".scale.init_scale")
+            delta_key = f"{prefix}.scale.delta_scale"
+            assert delta_key in sd, f"missing {delta_key} for {key}"
+            fused = sd[key] + sd[delta_key]
+            # read_attn.N.scale.init_scale → read_scales.N.gamma
+            new_key = prefix.replace("read_attn", "read_scales") + ".gamma"
+            log.info("  fuse  %-55s → %-35s %s", key, new_key, tuple(fused.shape))
+            out[new_key] = fused
+            consumed.add(key)
+            consumed.add(delta_key)
+    for key, val in sd.items():
+        if key not in consumed:
+            out[key] = val
+    return out
+
+
+def _strip_residual_wrappers(sd: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    """Strip .attn. wrapper from read/write attention keys.
+
+    read_attn.N.attn.X → read_attn.N.X
+    write_attn.N.attn.X → write_attn.N.X
+    """
+    out: dict[str, torch.Tensor] = {}
+    for key, val in sd.items():
+        new_key = key
+        for prefix in ("read_attn.", "write_attn."):
+            if key.startswith(prefix) and ".attn." in key:
+                new_key = key.replace(".attn.", ".", 1)
+                log.info("  unwrap %-54s → %-35s", key, new_key)
+                break
+        out[new_key] = val
+    return out
+
+
 def _remap_state_dict(sd: dict[str, torch.Tensor], map_key) -> dict[str, torch.Tensor]:
     """Remap PT state_dict → MLX-native keys and weight layouts."""
     out: dict[str, torch.Tensor] = {}
@@ -117,6 +160,9 @@ def _remap_state_dict(sd: dict[str, torch.Tensor], map_key) -> dict[str, torch.T
         else:
             log.info("  map   %-55s → %-35s %s", pt_key, mlx_key, tuple(val.shape))
         out[mlx_key] = val
+
+    out = _fuse_reparam_layer_scales(out)
+    out = _strip_residual_wrappers(out)
 
     total_params = sum(v.numel() for v in out.values())
     log.info("Remapped: %d tensors (%.1fM params), skipped: %d", len(out), total_params / 1e6, skipped)
@@ -205,7 +251,7 @@ def _verify(pt_model, weights_path: str, grid_size: int) -> None:
 
 def convert(args: Args) -> None:
     from canvit import CanViTForPretrainingHFHub
-    from canvit_mlx.model import CanViTConfig
+    from canvit_mlx.config import CanViTConfig
 
     out = args.out or _default_out(args.repo)
     log.info("=== CanViT conversion: %s → %s ===", args.repo, out)

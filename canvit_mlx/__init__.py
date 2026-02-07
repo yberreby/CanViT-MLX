@@ -1,13 +1,12 @@
 """CanViT inference on Apple Silicon via MLX."""
 
-from .coords import Viewpoint, grid_coords, sample_at_viewpoint
-from .model import CanViT, CanViTConfig, CanViTOutput, RecurrentState
-from .rope import compute_rope, make_rope_periods
-from .weights import load_canvit
+from .canvit import CanViT, CanViTOutput, RecurrentState
+from .checkpoint import load_canvit
+from .config import CanViTConfig
+from .glimpse import extract_glimpse_at_viewpoint
+from .viewpoint import Viewpoint
 
 __all__ = [
     "CanViT", "CanViTConfig", "CanViTOutput", "RecurrentState",
-    "Viewpoint", "grid_coords", "sample_at_viewpoint",
-    "compute_rope", "make_rope_periods",
-    "load_canvit",
+    "Viewpoint", "extract_glimpse_at_viewpoint", "load_canvit",
 ]

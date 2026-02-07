@@ -8,13 +8,13 @@ from conftest import assert_close, B, CANVAS_GRID
 
 class TestRWPositions:
     def test_default_config(self):
-        from canvit_mlx.model import compute_rw_positions
+        from canvit_mlx.canvit import compute_rw_positions
         r, w = compute_rw_positions(12, 2)
         assert r == [1, 5, 9]
         assert w == [3, 7, 11]
 
     def test_forced_final_write(self):
-        from canvit_mlx.model import compute_rw_positions
+        from canvit_mlx.canvit import compute_rw_positions
         r, w = compute_rw_positions(10, 2)
         assert w[-1] == 9  # forced: 7 != 9
 

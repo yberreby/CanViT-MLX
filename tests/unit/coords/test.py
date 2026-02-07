@@ -4,7 +4,8 @@ import mlx.core as mx
 import numpy as np
 import torch
 
-from canvit_mlx.coords import grid_coords, sample_at_viewpoint, Viewpoint
+from canvit_mlx import Viewpoint, extract_glimpse_at_viewpoint
+from canvit_mlx.grid import grid_coords
 from conftest import assert_close, B, SEED
 
 
@@ -31,7 +32,7 @@ class TestSampleAtViewpoint:
 
         img_mlx = mx.array(img_pt.numpy().transpose(0, 2, 3, 1))
         vp_mlx = Viewpoint(centers=mx.array(vp_centers), scales=mx.array(vp_scales))
-        got = sample_at_viewpoint(img_mlx, vp_mlx, glimpse_px)
+        got = extract_glimpse_at_viewpoint(img_mlx, vp_mlx, glimpse_px)
         mx.eval(got)
         return ref, got
 

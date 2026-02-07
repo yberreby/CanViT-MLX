@@ -1,7 +1,4 @@
-"""Weight loading from safetensors (converted by convert.py).
-
-The checkpoint is expected to have MLX-native key names — no remapping needed.
-"""
+__all__ = ["load_canvit"]
 
 import json
 import logging
@@ -9,7 +6,8 @@ from pathlib import Path
 
 import mlx.core as mx
 
-from ..model import CanViT, CanViTConfig
+from .canvit import CanViT
+from .config import CanViTConfig
 
 log = logging.getLogger(__name__)
 
