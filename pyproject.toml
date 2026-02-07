@@ -1,7 +1,26 @@
 [project]
 name = "canvit-mlx"
 version = "0.1.0"
-description = "Add your description here"
+description = "CanViT inference on Apple Silicon via MLX"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "canvit",
+    "mlx>=0.30.6",
+    "numpy>=2.2.0,<2.4.0",
+    "safetensors>=0.7.0",
+    "tyro>=1.0.6",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
+
+[tool.pytest.ini_options]
+python_files = ["test_*.py"]
+log_cli = true
+log_cli_level = "INFO"
+
+[tool.uv.sources]
+canvit = { git = "ssh://git@github.com/yberreby/CanViT.git" }

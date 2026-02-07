@@ -8,3 +8,11 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Artifacts (generated, not committed)
+weights.safetensors
+weights.json
+test_data/
+*.npy
+.pytest_cache/
+outputs/
