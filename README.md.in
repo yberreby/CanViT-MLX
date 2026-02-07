@@ -10,8 +10,7 @@ uv run just                        # lint + typecheck + dep enforcement + tests
 ```
 
 ```python
-from canvit_mlx import load_canvit, Viewpoint, extract_glimpse_at_viewpoint
-
+# Load model and run single-glimpse forward pass
 model = load_canvit("weights/canvit-vitb16-pretrain-512px-in21k.safetensors")
 state = model.init_state(batch_size=1, canvas_grid_size=32)
 vp = Viewpoint.full_scene(batch_size=1)
