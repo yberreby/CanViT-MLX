@@ -91,6 +91,19 @@ Restructured from monolithic `canvit_mlx.py` (789 lines) to proper hatchling pac
 - Integration: full-scene E2E, off-center viewpoint, 2-step recurrence, run_trajectory, teacher heads
 - Infrastructure: convert.py produces loadable weights
 
+### TODO: Clean weight loading
+The current `load_canvit()` does PyTorch→MLX key remapping at load time. This is ugly:
+conversion logic bleeds into the inference package. The right architecture:
+- `convert.py` does ALL key remapping, outputs checkpoint with MLX-native key names
+- `load_canvit()` becomes trivial: safe_open → model.load_weights(), zero key surgery
+- Future: HF Hub integration for canvit_mlx (download pre-converted weights directly,
+  possibly as optional dependency)
+
+This means the .safetensors format will change (breaking), but that's fine — convert.py
+regenerates them in ~5s. The key insight: canvit_mlx should stand on its own with a clean,
+stable checkpoint format, not have idiosyncrasies that only make sense relative to the
+PyTorch reference.
+
 ### Tolerance justification
 f32 SDPA accumulation error grows with sequence length (~1040 tokens for canvas).
 Canvas values reach ~2600 magnitude, giving occasional absolute errors ~3-4 (relative ~0.15%).
