@@ -1,9 +1,20 @@
-"""Model building block tests: patch embed, VPE, init state."""
+"""Model building block tests: patch embed, VPE, init state, R/W schedule."""
 
 import mlx.core as mx
+import pytest
 import torch
 
+from canvit_mlx.canvit import _compute_rw_positions
 from conftest import assert_close, B, CANVAS_GRID
+
+
+@pytest.mark.parametrize("n_blocks,rw_stride,expect_writes", [
+    (12, 2, [3, 7, 11]),   # current config — last block is naturally a write
+    (10, 2, [3, 7, 9]),    # forced append of last block
+])
+def test_rw_positions(n_blocks, rw_stride, expect_writes):
+    _, writes = _compute_rw_positions(n_blocks, rw_stride)
+    assert writes == expect_writes
 
 
 class TestPatchEmbed:

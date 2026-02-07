@@ -33,7 +33,7 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-python_files = ["test_*.py", "test.py"]
+python_files = ["test_*.py"]
 addopts = "--cov=canvit_mlx --cov-report=term-missing"
 log_cli = true
 log_cli_level = "INFO"
