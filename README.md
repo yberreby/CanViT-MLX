@@ -10,7 +10,9 @@ uv run just                        # lint + typecheck + dep enforcement + tests
 ```
 
 ```python
-# Load model and run single-glimpse forward pass
+from canvit_mlx import load_canvit, load_and_preprocess, Viewpoint, extract_glimpse_at_viewpoint
+
+image = load_and_preprocess("test_data/Cat03.jpg", target_size=512)
 model = load_canvit("weights/canvit-vitb16-pretrain-512px-in21k.safetensors")
 state = model.init_state(batch_size=1, canvas_grid_size=32)
 vp = Viewpoint.full_scene(batch_size=1)
@@ -43,6 +45,9 @@ canvit_mlx  CanViT inference on Apple Silicon via MLX.
 │   └── LayerScale(dim: int)
 ├── patch_embed  Image-to-patch-tokens via strided convolution.
 │   └── PatchEmbed(patch_size: int, embed_dim: int)
+├── preprocess  Image preprocessing: resize shortest edge, center crop, ImageNet
+│   normalize.
+│   └── load_and_preprocess(path: str, target_size: int) -> mlx.core.array
 ├── rope  2D Rotary Position Embeddings.
 │   ├── apply_rope_with_prefix(x: mlx.core.array, sin: mlx.core.array, cos: mlx.core.array) -> mlx.core.array
 │   ├── compute_rope(positions: mlx.core.array, periods: mlx.core.array) -> tuple[mlx.core.array, mlx.core.array]

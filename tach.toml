@@ -13,6 +13,7 @@ depends_on = [
     "canvit_mlx.glimpse",
     "canvit_mlx.canvit",
     "canvit_mlx.checkpoint",
+    "canvit_mlx.preprocess",
 ]
 
 [[modules]]
@@ -73,3 +74,7 @@ depends_on = [
 [[modules]]
 path = "canvit_mlx.checkpoint"
 depends_on = ["canvit_mlx.canvit", "canvit_mlx.config"]
+
+[[modules]]
+path = "canvit_mlx.preprocess"
+depends_on = []

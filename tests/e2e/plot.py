@@ -6,7 +6,9 @@ from pathlib import Path
 import mlx.core as mx
 import numpy as np
 
-from . import IMAGENET_MEAN, IMAGENET_STD, TRAJECTORY
+from canvit_mlx.preprocess import IMAGENET_MEAN, IMAGENET_STD
+
+from . import TRAJECTORY
 
 OUT_PATH = Path("outputs/comparison.png")
 

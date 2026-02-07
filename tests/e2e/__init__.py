@@ -5,12 +5,11 @@ from pathlib import Path
 import mlx.core as mx
 import numpy as np
 import torch
-from PIL import Image
 
 from conftest import CANVAS_GRID
 
-IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
-IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+from canvit_mlx.preprocess import load_and_preprocess
+
 IMAGE_PATH = Path("test_data/Cat03.jpg")
 PATCH_SIZE = 16
 IMG_SIZE = CANVAS_GRID * PATCH_SIZE  # 512
@@ -29,14 +28,8 @@ RTOL = 5e-3
 
 
 def load_image() -> tuple[mx.array, torch.Tensor]:
-    """PIL → resize → center crop → ImageNet normalize. Returns (NHWC, NCHW)."""
-    img = Image.open(IMAGE_PATH).convert("RGB")
-    w, h = img.size
-    scale = IMG_SIZE / min(w, h)
-    img = img.resize((round(w * scale), round(h * scale)), Image.BILINEAR)
-    w, h = img.size
-    img = img.crop(((w - IMG_SIZE) // 2, (h - IMG_SIZE) // 2,
-                     (w + IMG_SIZE) // 2, (h + IMG_SIZE) // 2))
-    arr = np.array(img, dtype=np.float32) / 255.0
-    arr = (arr - IMAGENET_MEAN) / IMAGENET_STD
-    return mx.array(arr[np.newaxis]), torch.from_numpy(arr.transpose(2, 0, 1)[np.newaxis])
+    """Preprocess via canvit_mlx.preprocess, derive PT tensor from same data."""
+    image_mlx = load_and_preprocess(str(IMAGE_PATH), target_size=IMG_SIZE)
+    # NHWC → NCHW for PyTorch, share the same pixel data
+    image_pt = torch.from_numpy(np.array(image_mlx).transpose(0, 3, 1, 2))
+    return image_mlx, image_pt
