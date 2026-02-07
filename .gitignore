@@ -10,7 +10,7 @@ wheels/
 .venv
 
 # Artifacts (generated, not committed)
-weights/
+/weights/
 *.npy
 .coverage
 .pytest_cache/

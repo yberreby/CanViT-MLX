@@ -1,0 +1,49 @@
+exact = true
+forbid_circular_dependencies = true
+root_module = "ignore"
+exclude = ["tests/**", "convert.py", "throwaway/**"]
+
+# --- Modules ---
+
+[[modules]]
+path = "canvit_mlx"
+depends_on = [
+    "canvit_mlx.coords",
+    "canvit_mlx.rope",
+    "canvit_mlx.model",
+    "canvit_mlx.weights",
+]
+
+[[modules]]
+path = "canvit_mlx.coords"
+depends_on = []
+
+[[modules]]
+path = "canvit_mlx.rope"
+depends_on = []
+
+[[modules]]
+path = "canvit_mlx.model"
+depends_on = ["canvit_mlx.coords", "canvit_mlx.rope"]
+
+[[modules]]
+path = "canvit_mlx.weights"
+depends_on = ["canvit_mlx.model"]
+
+# --- Interfaces (what each module exposes) ---
+
+[[interfaces]]
+from = ["canvit_mlx.coords"]
+expose = ["Viewpoint", "grid_coords", "sample_at_viewpoint", "canvas_coords_for_glimpse"]
+
+[[interfaces]]
+from = ["canvit_mlx.rope"]
+expose = ["compute_rope", "make_rope_periods", "apply_with_prefix", "apply_dinov3_with_prefix"]
+
+[[interfaces]]
+from = ["canvit_mlx.model"]
+expose = ["CanViT", "CanViTConfig", "CanViTOutput", "RecurrentState", "compute_rw_positions"]
+
+[[interfaces]]
+from = ["canvit_mlx.weights"]
+expose = ["load_canvit"]

@@ -24,12 +24,14 @@ dev = [
     "pytest-cov>=7.0.0",
     "ruff>=0.15.0",
     "scikit-learn>=1.8.0",
+    "tach>=0.33.2",
     "torch>=2.0",
     "tyro>=1.0.6",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+python_files = ["test_*.py", "test.py"]
 addopts = "--cov=canvit_mlx --cov-report=term-missing"
 log_cli = true
 log_cli_level = "INFO"
