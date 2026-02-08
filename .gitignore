@@ -16,8 +16,9 @@ wheels/
 .pytest_cache/
 outputs/
 
-# Bench outputs (timestamped, regenerated)
-bench/*.parquet
-bench/*.json
+# Bench outputs (timestamped subdirectories, regenerated)
+bench/20*/
 bench/*.png
-bench/*.svg
+
+# macOS
+.DS_Store

@@ -30,6 +30,7 @@ dev = [
     "scikit-learn>=1.8.0",
     "tach>=0.33.2",
     "torch>=2.0",
+    "transformers>=5.1.0",
     "tyro>=1.0.6",
 ]
 
