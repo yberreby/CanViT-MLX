@@ -59,13 +59,26 @@ def plot_forward(ax: Axes, df: pl.DataFrame, *,
         ax.yaxis.set_major_formatter(plt.ScalarFormatter())
     ax.ticklabel_format(axis="y", style="plain")
     major_pxs = [px for px in image_pxs if px & (px - 1) == 0]
+    ax.set_xlim(left=min(image_pxs), right=1024)
+    major_pxs = [px for px in major_pxs if px <= 1024]
     ax.set_xticks(major_pxs)
     ax.set_xticklabels([f"${px}^2$" for px in major_pxs])
     ax.set_xlabel("Scene resolution")
     ax.set_ylabel("Full forward time (ms)")
     ax.set_title("Full forward (95% CI)")
-    ax.set_ylim(bottom=0)
+    ax.set_ylim(bottom=2.5)
     if clip_to_canvit:
-        canvit_max = max(ci_ms(df, g, "full forward", "pt_raw_us", "pt_med_us")[0] for g in grids)
+        fwd = df.filter((pl.col("component") == "full forward") & (pl.col("image_px") <= 1024))
+        fwd_grids = sorted(fwd["grid"].unique().to_list())
+        canvit_max = max(ci_ms(df, g, "full forward", "pt_raw_us", "pt_med_us")[0] for g in fwd_grids)
         ax.set_ylim(top=canvit_max * 1.3)
+    # Right y-axis: FPS (inverse of ms) — nonlinear transform
+    ms_to_fps = lambda ms: 1000.0 / np.where(ms > 0, ms, np.nan)
+    ax2 = ax.secondary_yaxis("right", functions=(ms_to_fps, ms_to_fps))
+    ax2.set_ylabel("FPS")
+    _, ms_top = ax.get_ylim()
+    fps_ticks = [v for v in [30, 40, 50, 60, 80, 100, 200, 400] if v <= 1000 / 2.5 and v >= 1000 / ms_top]
+    ax2.set_yticks(fps_ticks)
+    ax2.set_yticklabels([str(v) for v in fps_ticks])
+
     ax.legend(fontsize=8, loc="upper right")

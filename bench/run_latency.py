@@ -128,8 +128,8 @@ def bench_teacher(name: str, model: torch.nn.Module, repo: str,
                   pt_sync, *, model_bf: torch.nn.Module | None = None) -> Row:
     from transformers import AutoImageProcessor
 
-    proc = AutoImageProcessor.from_pretrained(
-        repo, size={"height": image_px, "width": image_px})
+    sz = {"height": image_px, "width": image_px}
+    proc = AutoImageProcessor.from_pretrained(repo, size=sz, crop_size=sz)
     inp = proc(images=pil_image, return_tensors="pt")["pixel_values"].to(device)
     log.info("  %s input: %s", name, list(inp.shape))
 
@@ -561,7 +561,6 @@ def main(grids: tuple[int, ...] = (8, 9, 10, 11, 12, 13, 14, 15, 16,
                                     28, 32, 40, 48, 56, 64, 128),
          pt_device: str = "mps",
          dinov3_bf16: bool = False,
-         teacher_max_px: int = 384,
          out_dir: str | None = None) -> None:
 
     from PIL import Image
@@ -599,9 +598,9 @@ def main(grids: tuple[int, ...] = (8, 9, 10, 11, 12, 13, 14, 15, 16,
     vs_model = AutoModel.from_pretrained(DINOV3S_REPO, dtype=torch.float32).to(device).eval()
     log.info("Teachers loaded: ViT-B (%s), ViT-S (%s)", DINOV3_REPO, DINOV3S_REPO)
 
-    teachers: list[tuple[str, torch.nn.Module, torch.nn.Module | None, str]] = [
-        ("dinov3", d3_model, d3_model_bf, DINOV3_REPO),
-        ("dinov3s", vs_model, None, DINOV3S_REPO),
+    teachers: list[tuple[str, torch.nn.Module, torch.nn.Module | None, str, int]] = [
+        ("dinov3", d3_model, d3_model_bf, DINOV3_REPO, 576),
+        ("dinov3s", vs_model, None, DINOV3S_REPO, 1024),
     ]
     pil_image = Image.open(IMAGE_PATH)
 
@@ -648,14 +647,14 @@ def main(grids: tuple[int, ...] = (8, 9, 10, 11, 12, 13, 14, 15, 16,
                                  pt_sample, mlx_extract, PTVP, MLXVP)
 
             # Teacher baselines (PT-only timing)
-            for tname, tmodel, tmodel_bf, trepo in teachers:
-                if image_px <= teacher_max_px:
+            for tname, tmodel, tmodel_bf, trepo, tmax_px in teachers:
+                if image_px <= tmax_px:
                     rows.append(bench_teacher(
                         tname, tmodel, trepo, pil_image, image_px,
                         device, pt_sync, model_bf=tmodel_bf))
                 else:
-                    log.info("  %s skipped (image_px=%d > teacher_max_px=%d)",
-                             tname, image_px, teacher_max_px)
+                    log.info("  %s skipped (image_px=%d > %dpx)",
+                             tname, image_px, tmax_px)
 
         print_table(rows)
         all_results[canvas_grid] = rows
