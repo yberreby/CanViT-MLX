@@ -35,7 +35,8 @@ def extract_glimpse_at_viewpoint(image: mx.array, viewpoint: Viewpoint, glimpse_
         idx = (yy * W + xx).reshape(B, g * g)
         return mx.take_along_axis(flat, mx.broadcast_to(mx.expand_dims(idx, -1), (B, g * g, C)), axis=1).reshape(B, g, g, C)
 
-    return (gather(y0c, x0c) * (1 - wy) * (1 - wx) +
-            gather(y0c, x1c) * (1 - wy) * wx +
-            gather(y1c, x0c) * wy * (1 - wx) +
-            gather(y1c, x1c) * wy * wx)
+    result = (gather(y0c, x0c) * (1 - wy) * (1 - wx) +
+              gather(y0c, x1c) * (1 - wy) * wx +
+              gather(y1c, x0c) * wy * (1 - wx) +
+              gather(y1c, x1c) * wy * wx)
+    return result.astype(image.dtype)
