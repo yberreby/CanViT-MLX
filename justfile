@@ -22,13 +22,23 @@ test:
 convert:
     uv run python convert.py
 
-bench *ARGS: (run-bench ARGS) plot-bench
+bench *ARGS:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    DIR="bench/$(date -u +%Y-%m-%dT%H-%M-%S)"
+    mkdir -p "$DIR"
+    uv run python -m bench.run_latency --out-dir "$DIR" {{ARGS}}
+    uv run python -m bench.run_memory --out-dir "$DIR"
+    uv run python -m bench.plot "$DIR/results.parquet"
 
 run-bench *ARGS:
-    uv run python bench/run.py {{ARGS}}
+    uv run python -m bench.run_latency {{ARGS}}
 
-plot-bench:
-    uv run python bench/plot.py
+run-memory *ARGS:
+    uv run python -m bench.run_memory {{ARGS}}
+
+plot-bench *ARGS:
+    uv run python -m bench.plot {{ARGS}}
 
 tree:
     uv run pypatree canvit_mlx

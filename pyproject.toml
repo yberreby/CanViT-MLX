@@ -28,6 +28,7 @@ dev = [
     "pytest-cov>=7.0.0",
     "ruff>=0.15.0",
     "scikit-learn>=1.8.0",
+    "statsmodels>=0.14.6",
     "tach>=0.33.2",
     "torch>=2.0",
     "transformers>=5.1.0",
