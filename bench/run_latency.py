@@ -1,16 +1,18 @@
-"""Component-level benchmark: PT vs MLX (fp32 + bf16).
+"""Component-level latency benchmark: PT vs MLX (fp32 + bf16).
 
 Each component is fed the SAME input; correctness is checked BEFORE timing.
 Structurally impossible to bench something that isn't verified 1-to-1.
 
 Components: init_state, patch_embed, ViT block, canvas read, canvas write, full forward.
+Teacher baselines: DINOv3 ViT-B/16, DINOv3 ViT-S/16 (timing only, no MLX equivalent).
 Outputs: bench/<timestamp>/{results.parquet, meta.json, pca.png}.
 
 Usage:
-    uv run python bench/run.py                          # default grids, PT on MPS
-    uv run python bench/run.py --grids 32 64 128        # custom grids
-    uv run python bench/run.py --pt-device cpu           # PT on CPU
-    uv run python bench/run.py --dinov3-bf16             # enable DINOv3 bf16
+    uv run python -m bench.run_latency                          # default grids, PT on MPS
+    uv run python -m bench.run_latency --grids 32 64 128        # custom grids
+    uv run python -m bench.run_latency --pt-device cpu           # PT on CPU
+    uv run python -m bench.run_latency --dinov3-bf16             # enable DINOv3 ViT-B bf16
+    uv run python -m bench.run_latency --teacher-max-px 512      # teacher baselines up to 512px
 
 Notes:
     DINOv3 bf16 is off by default: on CPU ARM has no native bf16 compute
@@ -20,7 +22,6 @@ Notes:
 import logging
 import math
 import statistics
-import subprocess
 import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -30,26 +31,20 @@ import mlx.core as mx
 import numpy as np
 import torch
 
+from .shared import (
+    B, BENCH_DIR, DINOV3_REPO, DINOV3S_REPO, GLIMPSE_PX, HF_REPO,
+    IMAGE_PATH, IMAGENET_MEAN, IMAGENET_STD, TEACHER_COMPONENTS, WEIGHTS,
+    git_sha, make_pt_sync,
+)
+
 log = logging.getLogger(__name__)
 
-# ── Config ──────────────────────────────────────────────────────────────────
-B = 1
-GLIMPSE_PX = 128
 WARMUP = 1
 TIME_BUDGET_SECS = 1.0
 MIN_ITERS = 2
 MAX_ITERS = 100
 SEED = 42
-IMAGE_PATH = Path("test_data/Cat03.jpg")
-WEIGHTS = "weights/canvit-vitb16-pretrain-512px-in21k.safetensors"
-HF_REPO = "canvit/canvit-vitb16-pretrain-512px-in21k"
-DINOV3_REPO = "facebook/dinov3-vitb16-pretrain-lvd1689m"
-
 RTOL = 5e-3
-BENCH_DIR = Path(__file__).parent
-
-IMAGENET_MEAN = np.array([0.485, 0.456, 0.406])
-IMAGENET_STD = np.array([0.229, 0.224, 0.225])
 
 
 # ── Data types ──────────────────────────────────────────────────────────────
@@ -118,12 +113,6 @@ def check(name: str, ref: np.ndarray, got: np.ndarray) -> float:
     return rel
 
 
-def _make_pt_sync(device: torch.device):
-    if device.type == "mps":
-        return torch.mps.synchronize
-    if device.type == "cuda":
-        return torch.cuda.synchronize
-    return lambda: None
 
 
 def check_and_bench(name: str, count: int,
@@ -132,6 +121,40 @@ def check_and_bench(name: str, count: int,
     mlx_val = mlx_fn(); mlx_sync()
     rel = check(name, pt_val.cpu().numpy(), np.asarray(mlx_val))
     return Row(name, count, time_fn(pt_fn, pt_sync), time_fn(mlx_fn, mlx_sync), rel)
+
+
+def bench_teacher(name: str, model: torch.nn.Module, repo: str,
+                  pil_image, image_px: int, device: torch.device,
+                  pt_sync, *, model_bf: torch.nn.Module | None = None) -> Row:
+    from transformers import AutoImageProcessor
+
+    proc = AutoImageProcessor.from_pretrained(
+        repo, size={"height": image_px, "width": image_px})
+    inp = proc(images=pil_image, return_tensors="pt")["pixel_values"].to(device)
+    log.info("  %s input: %s", name, list(inp.shape))
+
+    fp32_stats = time_fn(lambda: model(inp).last_hidden_state, pt_sync)
+
+    bf16_stats = None
+    bf16_errs = None
+    if model_bf is not None:
+        inp_bf = inp.to(torch.bfloat16)
+        bf16_stats = time_fn(
+            lambda: model_bf(inp_bf).last_hidden_state, pt_sync)
+        ref = model(inp).last_hidden_state.float()
+        got = model_bf(inp_bf).last_hidden_state.float()
+        pt_sync()
+        err = check(f"{name} bf16 vs fp32", ref.cpu().numpy(), got.cpu().numpy())
+        bf16_errs = {"last_hidden_state": err}
+        log.info("  %s fp32: %.0fμs, bf16: %.0fμs (%.2f×)",
+                 name, fp32_stats.med, bf16_stats.med,
+                 fp32_stats.med / bf16_stats.med)
+    else:
+        log.info("  %s fp32: %.0fμs", name, fp32_stats.med)
+
+    row = Row(name, 1, fp32_stats, fp32_stats, 0.0, bf16_stats)
+    row.bf16_errs = bf16_errs
+    return row
 
 
 def _fmt_row(name, count, pt_med, f32_med, bf16_med):
@@ -149,7 +172,7 @@ def print_table(rows: list[Row]) -> None:
            f"{'PT med':>8} {'f32 med':>8} {'bf16 med':>8} "
            f"{'f32/PT':>7} {'bf16/PT':>7} {'bf16/f32':>8}")
     sep = "─" * len(hdr)
-    components = [r for r in rows if r.name not in ("full forward", "dinov3")]
+    components = [r for r in rows if r.name != "full forward" and r.name not in TEACHER_COMPONENTS]
     sum_pt = sum(r.pt.med * r.count for r in components)
     sum_f32 = sum(r.weighted for r in components)
     sum_bf = sum(r.bf16_weighted for r in components)
@@ -163,7 +186,7 @@ def print_table(rows: list[Row]) -> None:
     print(_fmt_row("Σ components", 0, sum_pt, sum_f32, sum_bf or None)
           .replace("  0 ", "    "))
     for r in rows:
-        if r.name in ("full forward", "dinov3"):
+        if r.name == "full forward" or r.name in TEACHER_COMPONENTS:
             print(_fmt_row(r.name, r.count, r.pt.med, r.mlx.med,
                            r.bf16.med if r.bf16 else None))
     print(sep)
@@ -175,7 +198,7 @@ def bench_at_grid(pt_m, mlx_m, mlx_m_bf16, cfg, device, canvas_grid, image_px,
                   image_mlx: mx.array, n_patches, n_local,
                   pt_rope, pt_periods, mlx_rope, mlx_periods,
                   pt_sample, mlx_extract, PTVP, MLXVP) -> list[Row]:
-    pt_sync = _make_pt_sync(device)
+    pt_sync = make_pt_sync(device)
     n_canvas = cfg.n_canvas_registers + canvas_grid ** 2
     n_reads = len(mlx_m.read_after_blocks)
     n_writes = len(mlx_m.write_after_blocks)
@@ -455,13 +478,6 @@ def save_pca_and_artifacts(run_dir: Path, mlx_m, mlx_m_bf16, image_mlx, cfg,
 
 # ── Output ──────────────────────────────────────────────────────────────────
 
-def _git_sha() -> str:
-    try:
-        return subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"], text=True
-        ).strip()
-    except Exception:
-        return "unknown"
 
 
 def save_results(run_dir: Path, all_results: dict[int, list[Row]], cfg,
@@ -471,7 +487,7 @@ def save_results(run_dir: Path, all_results: dict[int, list[Row]], cfg,
     import polars as pl
 
     ts = datetime.now(timezone.utc)
-    git = _git_sha()
+    git = git_sha()
 
     meta = {
         "timestamp": ts.isoformat(),
@@ -495,7 +511,7 @@ def save_results(run_dir: Path, all_results: dict[int, list[Row]], cfg,
     records = []
     for grid, rows in sorted(all_results.items()):
         for r in rows:
-            has_mlx = r.name != "dinov3"
+            has_mlx = r.name not in TEACHER_COMPONENTS
             rec = {
                 **meta,
                 "grid": grid,
@@ -540,11 +556,16 @@ def save_results(run_dir: Path, all_results: dict[int, list[Row]], cfg,
 
 # ── Main ────────────────────────────────────────────────────────────────────
 
-def main(grids: tuple[int, ...] = (8, 16, 32, 64), pt_device: str = "mps",
-         dinov3_bf16: bool = False) -> None:
+def main(grids: tuple[int, ...] = (8, 9, 10, 11, 12, 13, 14, 15, 16,
+                                    17, 18, 19, 20, 21, 22, 23, 24,
+                                    28, 32, 40, 48, 56, 64, 128),
+         pt_device: str = "mps",
+         dinov3_bf16: bool = False,
+         teacher_max_px: int = 384,
+         out_dir: str | None = None) -> None:
 
     from PIL import Image
-    from transformers import AutoImageProcessor, AutoModel
+    from transformers import AutoModel
 
     from canvit import CanViTForPretrainingHFHub, sample_at_viewpoint as pt_sample
     from canvit.rope import compute_rope as pt_rope, make_rope_periods as pt_periods
@@ -556,11 +577,11 @@ def main(grids: tuple[int, ...] = (8, 16, 32, 64), pt_device: str = "mps",
     from canvit_mlx.rope import compute_rope as mlx_rope, make_rope_periods as mlx_periods
 
     device = torch.device(pt_device)
-    pt_sync = _make_pt_sync(device)
+    pt_sync = make_pt_sync(device)
 
     # Output directory
     ts = datetime.now(timezone.utc)
-    run_dir = BENCH_DIR / ts.strftime("%Y-%m-%dT%H-%M-%S")
+    run_dir = Path(out_dir) if out_dir else BENCH_DIR / ts.strftime("%Y-%m-%dT%H-%M-%S")
     run_dir.mkdir(exist_ok=True)
     log.info("Output: %s", run_dir)
 
@@ -571,10 +592,17 @@ def main(grids: tuple[int, ...] = (8, 16, 32, 64), pt_device: str = "mps",
     mlx_m_bf16.apply(lambda p: p.astype(mx.bfloat16))
     cfg = mlx_m.cfg
 
-    log.info("Loading DINOv3 baseline...")
+    log.info("Loading teacher baselines...")
     d3_model = AutoModel.from_pretrained(DINOV3_REPO, dtype=torch.float32).to(device).eval()
     d3_model_bf = (AutoModel.from_pretrained(DINOV3_REPO, dtype=torch.bfloat16).to(device).eval()
                    if dinov3_bf16 else None)
+    vs_model = AutoModel.from_pretrained(DINOV3S_REPO, dtype=torch.float32).to(device).eval()
+    log.info("Teachers loaded: ViT-B (%s), ViT-S (%s)", DINOV3_REPO, DINOV3S_REPO)
+
+    teachers: list[tuple[str, torch.nn.Module, torch.nn.Module | None, str]] = [
+        ("dinov3", d3_model, d3_model_bf, DINOV3_REPO),
+        ("dinov3s", vs_model, None, DINOV3S_REPO),
+    ]
     pil_image = Image.open(IMAGE_PATH)
 
     n_patches = (GLIMPSE_PX // cfg.patch_size) ** 2
@@ -593,8 +621,12 @@ def main(grids: tuple[int, ...] = (8, 16, 32, 64), pt_device: str = "mps",
     log.info("reads@%s (×%d), writes@%s (×%d)",
              mlx_m.read_after_blocks, len(mlx_m.read_after_blocks),
              mlx_m.write_after_blocks, len(mlx_m.write_after_blocks))
-    log.info("Torch %s, MLX %s, git %s", torch.__version__, mx.__version__, _git_sha())
+    log.info("Torch %s, MLX %s, git %s", torch.__version__, mx.__version__, git_sha())
     log.info("Grids: %s", grids)
+
+    for g in grids:
+        px = max(g * cfg.patch_size, GLIMPSE_PX)
+        assert px % cfg.patch_size == 0, f"grid={g} → image={px}px not divisible by patch_size={cfg.patch_size}"
 
     all_results: dict[int, list[Row]] = {}
     for canvas_grid in grids:
@@ -615,37 +647,15 @@ def main(grids: tuple[int, ...] = (8, 16, 32, 64), pt_device: str = "mps",
                                  pt_rope, pt_periods, mlx_rope, mlx_periods,
                                  pt_sample, mlx_extract, PTVP, MLXVP)
 
-            # DINOv3 baseline (fp32 always, bf16 optional)
-            dinov3_proc = AutoImageProcessor.from_pretrained(
-                DINOV3_REPO, size={"height": image_px, "width": image_px},
-            )
-            d3_input = dinov3_proc(images=pil_image, return_tensors="pt")["pixel_values"].to(device)
-            log.info("  DINOv3 input: %s", list(d3_input.shape))
-
-            d3_fp32_stats = time_fn(
-                lambda: d3_model(d3_input).last_hidden_state, pt_sync)
-
-            d3_bf16_stats = None
-            d3_errs = None
-            if d3_model_bf is not None:
-                d3_input_bf = d3_input.to(torch.bfloat16)
-                d3_bf16_stats = time_fn(
-                    lambda: d3_model_bf(d3_input_bf).last_hidden_state, pt_sync)
-                d3_ref = d3_model(d3_input).last_hidden_state.float()
-                d3_got = d3_model_bf(d3_input_bf).last_hidden_state.float()
-                pt_sync()
-                d3_err = check("dinov3 bf16 vs fp32", d3_ref.cpu().numpy(), d3_got.cpu().numpy())
-                d3_errs = {"last_hidden_state": d3_err}
-                log.info("  DINOv3 fp32: %.0fμs, bf16: %.0fμs (%.2f×)",
-                         d3_fp32_stats.med, d3_bf16_stats.med,
-                         d3_fp32_stats.med / d3_bf16_stats.med)
-            else:
-                log.info("  DINOv3 fp32: %.0fμs", d3_fp32_stats.med)
-
-            d3_row = Row("dinov3", 1, d3_fp32_stats, d3_fp32_stats, 0.0,
-                         d3_bf16_stats)
-            d3_row.bf16_errs = d3_errs
-            rows.append(d3_row)
+            # Teacher baselines (PT-only timing)
+            for tname, tmodel, tmodel_bf, trepo in teachers:
+                if image_px <= teacher_max_px:
+                    rows.append(bench_teacher(
+                        tname, tmodel, trepo, pil_image, image_px,
+                        device, pt_sync, model_bf=tmodel_bf))
+                else:
+                    log.info("  %s skipped (image_px=%d > teacher_max_px=%d)",
+                             tname, image_px, teacher_max_px)
 
         print_table(rows)
         all_results[canvas_grid] = rows
