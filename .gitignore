@@ -20,5 +20,9 @@ outputs/
 bench/20*/
 bench/*.png
 
+# Experiment tracking
+mlflow.db
+mlruns/
+
 # macOS
 .DS_Store

@@ -22,6 +22,8 @@ dev = [
     "basedpyright>=1.37.4",
     "canvit",
     "matplotlib>=3.10.8",
+    "mlflow>=3.9.0",
+    "optuna>=4.7.0",
     "polars>=1.38.1",
     "pypatree>=0.2.0",
     "pytest>=9.0.2",
@@ -31,6 +33,8 @@ dev = [
     "statsmodels>=0.14.6",
     "tach>=0.33.2",
     "torch>=2.0",
+    "torchvision>=0.25.0",
+    "tqdm>=4.67.3",
     "transformers>=5.1.0",
     "tyro>=1.0.6",
 ]
