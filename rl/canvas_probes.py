@@ -1,20 +1,23 @@
-"""Canvas linear probes: location + scale decodability from frozen CanViT.
+"""Canvas per-class location probes on frozen CanViT.
 
-A MNIST digit (random scale 14-56px) is placed at a random location on a
-256x256 image. A frozen CanViT processes the full scene once. Tiny linear
-probes on the canvas spatial tokens predict digit center and scale.
+Multiple MNIST digits (unique classes, fixed scale) placed on a 256x256
+canvas. Frozen CanViT processes the full scene once. A single linear probe
+(D -> 10) on the canvas spatial tokens predicts each digit class's center
+independently via per-class spatial softmax.
 
-Demonstrates that the canvas linearly encodes object location and size
-without any task-specific training.
+Demonstrates class-selective spatial attention: each probe output attends to
+its digit and ignores distractors, using only frozen pretrained features.
 
 Usage:
     uv run python rl/canvas_probes.py
-    uv run python rl/canvas_probes.py --n-steps 2000 --batch-size 8
+    uv run python rl/canvas_probes.py --n-steps 2000 --digits-per-image 5
 """
 
+import json
 import logging
 import time
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
@@ -25,6 +28,7 @@ import mlx.optimizers as optim
 import numpy as np
 import tyro
 from mlx.utils import tree_flatten
+from scipy.ndimage import zoom as ndzoom
 from tqdm import tqdm
 
 from canvit_mlx import Viewpoint, extract_glimpse_at_viewpoint, load_canvit
@@ -34,6 +38,7 @@ log = logging.getLogger(__name__)
 
 _MEAN_NP = np.array([0.485, 0.456, 0.406])
 _STD_NP = np.array([0.229, 0.224, 0.225])
+N_CLASSES = 10
 
 
 @dataclass
@@ -42,14 +47,14 @@ class Config:
     image_size: int = 256
     canvas_grid: int = 32
     glimpse_px: int = 64
-    batch_size: int = 4
-    n_steps: int = 1000
-    lr: float = 1e-2
-    digit_min_px: int = 14
-    digit_max_px: int = 56
+    batch_size: int = 8
+    n_steps: int = 5000
+    lr: float = 3e-3
+    digits_per_image: int = 10
+    digit_px: int = 32
     ema_alpha: float = 0.95
     log_interval: int = 10
-    viz_interval: int = 200
+    viz_interval: int = 500
     out_dir: str = "outputs/canvas_probes"
 
 
@@ -62,90 +67,78 @@ def load_mnist() -> tuple[np.ndarray, np.ndarray]:
     return ds.data.numpy(), ds.targets.numpy()
 
 
+def indices_by_class(labels: np.ndarray) -> list[np.ndarray]:
+    return [np.where(labels == c)[0] for c in range(N_CLASSES)]
+
+
 def make_batch(
     mnist_images: np.ndarray,
+    by_class: list[np.ndarray],
     B: int, canvas_size: int,
-    digit_min_px: int, digit_max_px: int,
+    digits_per_image: int,
+    digit_px: int,
 ) -> tuple[mx.array, mx.array, mx.array]:
-    """Returns (images_norm, centers_norm, scales_norm).
+    """Returns (images_norm, centers, present).
 
-    centers_norm: [B, 2] in [-1, 1] (y, x).
-    scales_norm: [B] digit size / canvas_size, in (0, 1).
+    centers: [B, 10, 2] in [-1, 1] (y, x). Valid only where present=True.
+    present: [B, 10] float mask (1.0 where class is on the canvas).
     """
-    idx = np.random.randint(0, len(mnist_images), size=B)
-
-    # Random digit size per sample
-    digit_sizes = np.random.randint(digit_min_px, digit_max_px + 1, size=B)
-
     canvas = np.random.normal(0.0, 0.05, (B, canvas_size, canvas_size, 3)).astype(np.float32)
-    centers = np.zeros((B, 2), dtype=np.float32)
-    scales = np.zeros(B, dtype=np.float32)
+    centers = np.zeros((B, N_CLASSES, 2), dtype=np.float32)
+    present = np.zeros((B, N_CLASSES), dtype=np.float32)
 
     for i in range(B):
-        sz = digit_sizes[i]
-        # Resize digit to sz x sz via nearest-neighbor
-        src = mnist_images[idx[i]].astype(np.float32) / 255.0
-        # Simple resize: repeat pixels
-        ys = np.linspace(0, 27, sz).astype(int)
-        xs = np.linspace(0, 27, sz).astype(int)
-        digit = src[np.ix_(ys, xs)]
+        classes = np.random.choice(N_CLASSES, size=digits_per_image, replace=False)
+        for cls in classes:
+            idx = by_class[cls][np.random.randint(len(by_class[cls]))]
+            src = mnist_images[idx].astype(np.float32) / 255.0
 
-        max_pos = canvas_size - sz
-        py = np.random.randint(0, max(1, max_pos))
-        px = np.random.randint(0, max(1, max_pos))
+            ys = np.linspace(0, 27, digit_px).astype(int)
+            xs = np.linspace(0, 27, digit_px).astype(int)
+            digit = src[np.ix_(ys, xs)]
 
-        for c in range(3):
-            canvas[i, py:py+sz, px:px+sz, c] = digit
+            max_pos = canvas_size - digit_px
+            py = np.random.randint(0, max(1, max_pos))
+            px = np.random.randint(0, max(1, max_pos))
 
-        centers[i, 0] = (py + sz / 2) / canvas_size * 2 - 1
-        centers[i, 1] = (px + sz / 2) / canvas_size * 2 - 1
-        scales[i] = sz / canvas_size
+            for c in range(3):
+                canvas[i, py:py+digit_px, px:px+digit_px, c] = digit
+
+            centers[i, cls, 0] = (py + digit_px / 2) / canvas_size * 2 - 1
+            centers[i, cls, 1] = (px + digit_px / 2) / canvas_size * 2 - 1
+            present[i, cls] = 1.0
 
     images = (canvas - _MEAN_NP) / _STD_NP
-    return mx.array(images), mx.array(centers), mx.array(scales)
+    return mx.array(images), mx.array(centers), mx.array(present)
 
 
-# -- Probes ------------------------------------------------------------------
+# -- Probe -------------------------------------------------------------------
 
 
-class LocationProbe(nn.Module):
-    """Spatial softmax: LN + Linear(D,1) + softmax -> weighted coords."""
+class PerClassLocationProbe(nn.Module):
+    """Shared LN + Linear(D, C): per-class spatial softmax -> per-class centers.
 
-    def __init__(self, canvas_dim: int):
+    Equivalent to C independent LocationProbe(D,1), but vectorized.
+    """
+
+    def __init__(self, canvas_dim: int, n_classes: int):
         super().__init__()
         self.ln = nn.LayerNorm(canvas_dim)
-        self.proj = nn.Linear(canvas_dim, 1)
+        self.proj = nn.Linear(canvas_dim, n_classes)
 
     def __call__(self, spatial: mx.array, grid_size: int) -> mx.array:
-        logits = self.proj(self.ln(spatial)).squeeze(-1)
-        weights = mx.softmax(logits, axis=-1)
-        coords = grid_coords(grid_size, grid_size).reshape(1, -1, 2)
-        return mx.sum(weights[:, :, None] * coords, axis=1)
+        """[B, S, D] -> [B, C, 2] predicted centers per class."""
+        logits = self.proj(self.ln(spatial))  # [B, S, C]
+        weights = mx.softmax(logits, axis=1)  # softmax over spatial dim
+        coords = grid_coords(grid_size, grid_size).reshape(1, -1, 1, 2)  # [1, S, 1, 2]
+        return mx.sum(weights[:, :, :, None] * coords, axis=1)  # [B, C, 2]
 
-    def attention_map(self, spatial: mx.array, grid_size: int) -> mx.array:
-        """Returns [B, G, G] softmax attention weights."""
-        logits = self.proj(self.ln(spatial)).squeeze(-1)
-        return mx.softmax(logits, axis=-1).reshape(-1, grid_size, grid_size)
-
-
-class ScaleProbe(nn.Module):
-    """Mean-pool + Linear(D,1) + sigmoid -> scalar in [0, 1]."""
-
-    def __init__(self, canvas_dim: int):
-        super().__init__()
-        self.ln = nn.LayerNorm(canvas_dim)
-        self.proj = nn.Linear(canvas_dim, 1)
-
-    def __call__(self, spatial: mx.array) -> mx.array:
-        pooled = mx.mean(self.ln(spatial), axis=1)
-        return mx.sigmoid(self.proj(pooled)).squeeze(-1)
-
-
-class Probes(nn.Module):
-    def __init__(self, canvas_dim: int):
-        super().__init__()
-        self.location = LocationProbe(canvas_dim)
-        self.scale = ScaleProbe(canvas_dim)
+    def attention_maps(self, spatial: mx.array, grid_size: int) -> mx.array:
+        """[B, S, D] -> [B, C, G, G] per-class attention heatmaps."""
+        logits = self.proj(self.ln(spatial))  # [B, S, C]
+        weights = mx.softmax(logits, axis=1)
+        B = weights.shape[0]
+        return weights.reshape(B, grid_size, grid_size, -1).transpose(0, 3, 1, 2)
 
 
 # -- Training ----------------------------------------------------------------
@@ -154,7 +147,8 @@ class Probes(nn.Module):
 def train(cfg: Config) -> None:
     import mlflow
 
-    mnist_images, _ = load_mnist()
+    mnist_images, mnist_labels = load_mnist()
+    by_class = indices_by_class(mnist_labels)
     log.info("MNIST: %d images", len(mnist_images))
 
     model = load_canvit(cfg.weights)
@@ -162,161 +156,213 @@ def train(cfg: Config) -> None:
     n_regs = model.cfg.n_canvas_registers
     grid = cfg.canvas_grid
 
-    probes = Probes(model.cfg.canvas_dim)
-    n_params = sum(p.size for _, p in tree_flatten(probes.trainable_parameters()))
+    probe = PerClassLocationProbe(model.cfg.canvas_dim, N_CLASSES)
+    n_params = sum(p.size for _, p in tree_flatten(probe.trainable_parameters()))
     log.info("Probe params: %d", n_params)
 
-    probe_opt = optim.Adam(learning_rate=cfg.lr)
+    opt = optim.Adam(learning_rate=cfg.lr)
 
-    def loss_fn(probes: Probes, spatial: mx.array, target_centers: mx.array, target_scales: mx.array) -> mx.array:
-        loc_pred = probes.location(spatial, grid)
-        scale_pred = probes.scale(spatial)
-        loc_mse = mx.mean(mx.sum((loc_pred - target_centers) ** 2, axis=-1))
-        scale_mse = mx.mean((scale_pred - target_scales) ** 2)
-        return loc_mse + scale_mse
+    def loss_fn(probe: PerClassLocationProbe, spatial: mx.array,
+                target_centers: mx.array, present: mx.array) -> mx.array:
+        pred = probe(spatial, grid)  # [B, C, 2]
+        err = mx.sum((pred - target_centers) ** 2, axis=-1)  # [B, C]
+        return mx.sum(err * present) / mx.sum(present)
 
-    loss_and_grad = nn.value_and_grad(probes, loss_fn)
+    loss_and_grad = nn.value_and_grad(probe, loss_fn)
 
-    mlflow.log_params({**vars(cfg), "n_probe_params": n_params})
+    out_dir = Path(cfg.out_dir) / time.strftime("%Y%m%d_%H%M%S")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "config.json").write_text(json.dumps(asdict(cfg), indent=2))
+    log.info("Artifacts → %s", out_dir)
+
+    mlflow.log_params({**vars(cfg), "n_probe_params": n_params, "out_dir": str(out_dir)})
 
     ema_loss = 0.0
-    ema_loc = 0.0
-    ema_scale = 0.0
     alpha = cfg.ema_alpha
-
-    history: dict[str, list[float]] = {"loss": [], "loc_mse": [], "scale_mse": [], "step": []}
+    history: dict[str, list[float]] = {"ema_loss": [], "raw_loss": [], "grad_norm": [], "step": []}
+    # Per-class histories: list of (step, class_mse_array) for classes present
+    per_class_history: dict[str, list[float]] = {f"class_{c}": [] for c in range(N_CLASSES)}
+    per_class_steps: dict[str, list[int]] = {f"class_{c}": [] for c in range(N_CLASSES)}
     t0 = time.monotonic()
 
     for step in tqdm(range(cfg.n_steps), desc="canvas-probes"):
-        images, centers, scales = make_batch(
-            mnist_images, cfg.batch_size, cfg.image_size,
-            cfg.digit_min_px, cfg.digit_max_px,
+        images, centers, present = make_batch(
+            mnist_images, by_class, cfg.batch_size, cfg.image_size,
+            cfg.digits_per_image, cfg.digit_px,
         )
         vp = Viewpoint.full_scene(cfg.batch_size)
         glimpse = extract_glimpse_at_viewpoint(images, vp, cfg.glimpse_px)
         out = model(glimpse, model.init_state(cfg.batch_size, grid), vp)
         spatial = mx.stop_gradient(out.state.canvas[:, n_regs:])
 
-        loss, grads = loss_and_grad(probes, spatial, centers, scales)
-        probe_opt.update(probes, grads)
-
-        # Also compute individual losses for logging
-        loc_pred = probes.location(spatial, grid)
-        scale_pred = probes.scale(spatial)
-        loc_mse = mx.mean(mx.sum((loc_pred - centers) ** 2, axis=-1))
-        scale_mse = mx.mean((scale_pred - scales) ** 2)
+        loss, grads = loss_and_grad(probe, spatial, centers, present)
+        grad_norm = mx.sqrt(sum(mx.sum(g ** 2) for _, g in tree_flatten(grads)))
+        opt.update(probe, grads)
 
         is_log = step % cfg.log_interval == 0
         if is_log:
-            mx.eval(probes.parameters(), probe_opt.state, loss, loc_mse, scale_mse)
+            # Per-class MSE (recompute — probe is tiny, cheap)
+            pred = probe(spatial, grid)  # [B, C, 2]
+            err = mx.sum((pred - centers) ** 2, axis=-1)  # [B, C]
+            class_count = mx.sum(present, axis=0)  # [C]
+            per_class_mse = mx.sum(err * present, axis=0) / mx.maximum(class_count, 1.0)  # [C]
+            mx.eval(probe.parameters(), opt.state, loss, grad_norm, per_class_mse, class_count)
         else:
-            mx.eval(probes.parameters(), probe_opt.state)
+            mx.eval(probe.parameters(), opt.state)
 
         if is_log:
-            l, lm, sm = loss.item(), loc_mse.item(), scale_mse.item()
+            raw = loss.item()
+            gn = grad_norm.item()
             bc = 1 - alpha ** (step + 1)
-            ema_loss = alpha * ema_loss + (1 - alpha) * l
-            ema_loc = alpha * ema_loc + (1 - alpha) * lm
-            ema_scale = alpha * ema_scale + (1 - alpha) * sm
+            ema_loss = alpha * ema_loss + (1 - alpha) * raw
 
-            history["loss"].append(ema_loss / bc)
-            history["loc_mse"].append(ema_loc / bc)
-            history["scale_mse"].append(ema_scale / bc)
+            history["ema_loss"].append(ema_loss / bc)
+            history["raw_loss"].append(raw)
+            history["grad_norm"].append(gn)
             history["step"].append(step)
 
-            mlflow.log_metrics({
+            metrics: dict[str, float] = {
                 "ema/loss": ema_loss / bc,
-                "ema/loc_mse": ema_loc / bc,
-                "ema/scale_mse": ema_scale / bc,
-            }, step=step)
+                "raw/loss": raw,
+                "grad_norm": gn,
+            }
+            # Per-class MSE for present classes
+            pc_mse = np.array(per_class_mse)
+            cc = np.array(class_count)
+            for c in range(N_CLASSES):
+                if cc[c] > 0:
+                    metrics[f"class/{c}_mse"] = float(pc_mse[c])
+                    per_class_history[f"class_{c}"].append(float(pc_mse[c]))
+                    per_class_steps[f"class_{c}"].append(step)
+            mlflow.log_metrics(metrics, step=step)
 
             if step % (cfg.log_interval * 10) == 0:
+                present_mse = [f"{c}:{pc_mse[c]:.4f}" for c in range(N_CLASSES) if cc[c] > 0]
                 tqdm.write(
-                    f"step={step:04d}  loss={ema_loss/bc:.6f}  "
-                    f"loc={ema_loc/bc:.6f}  scale={ema_scale/bc:.6f}"
+                    f"step={step:04d}  ema={ema_loss/bc:.6f}  raw={raw:.6f}  "
+                    f"gnorm={gn:.4f}  [{', '.join(present_mse)}]"  # noqa: E501
                 )
 
         if step % cfg.viz_interval == 0 or step == cfg.n_steps - 1:
-            fig = _make_viz(model, probes, cfg, step, mnist_images)
+            fig = _make_viz(model, probe, cfg, step, mnist_images, by_class)
+            fig.savefig(str(out_dir / f"viz_{step:05d}.png"), dpi=150)
             mlflow.log_figure(fig, f"viz/step_{step:05d}.png")
             plt.close(fig)
 
     elapsed = time.monotonic() - t0
     log.info("Done: %d steps in %.1fs (%.1f step/s)", cfg.n_steps, elapsed, cfg.n_steps / elapsed)
 
-    # Final convergence plot
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 4))
-    ax1.plot(history["step"], history["loc_mse"])
-    ax1.set_xlabel("step")
-    ax1.set_ylabel("location MSE")
-    ax1.set_title("Location probe")
-    ax1.set_yscale("log")
-    ax2.plot(history["step"], history["scale_mse"])
-    ax2.set_xlabel("step")
-    ax2.set_ylabel("scale MSE")
-    ax2.set_title("Scale probe")
-    ax2.set_yscale("log")
+    # Save probe checkpoint
+    ckpt_path = out_dir / "probe.npz"
+    probe.save_weights(str(ckpt_path))
+    log.info("Checkpoint → %s (%.1f KB)", ckpt_path, ckpt_path.stat().st_size / 1024)
+
+    # Save full metrics history
+    metrics_path = out_dir / "metrics.npz"
+    save_dict: dict[str, np.ndarray] = {k: np.array(v) for k, v in history.items()}
+    for c in range(N_CLASSES):
+        key = f"class_{c}"
+        save_dict[f"{key}_mse"] = np.array(per_class_history[key])
+        save_dict[f"{key}_steps"] = np.array(per_class_steps[key])
+    np.savez(str(metrics_path), **save_dict)
+    log.info("Metrics → %s", metrics_path)
+
+    # Convergence plot
+    fig, axes = plt.subplots(1, 3, figsize=(14, 4))
+    axes[0].plot(history["step"], history["ema_loss"], label="EMA")
+    axes[0].plot(history["step"], history["raw_loss"], alpha=0.3, label="raw")
+    axes[0].set_xlabel("step")
+    axes[0].set_ylabel("location MSE")
+    axes[0].set_yscale("log")
+    axes[0].legend()
+    axes[0].set_title("Loss")
+    axes[1].plot(history["step"], history["grad_norm"])
+    axes[1].set_xlabel("step")
+    axes[1].set_ylabel("grad norm")
+    axes[1].set_title("Gradient norm")
+    # Per-class EMA
+    for c in range(N_CLASSES):
+        key = f"class_{c}"
+        steps = per_class_steps[key]
+        vals = per_class_history[key]
+        if len(vals) > 10:
+            axes[2].plot(steps, vals, alpha=0.4, label=str(c), color=_COLORS[c])
+    axes[2].set_xlabel("step")
+    axes[2].set_ylabel("per-class MSE")
+    axes[2].set_title("Per-class location MSE")
+    axes[2].legend(fontsize=6, ncol=2)
     fig.tight_layout()
+    conv_path = out_dir / "convergence.png"
+    fig.savefig(str(conv_path), dpi=150)
     mlflow.log_figure(fig, "convergence.png")
     plt.close(fig)
+    log.info("Plot → %s", conv_path)
 
 
-def _make_viz(model, probes: Probes, cfg: Config, step: int,
-              mnist_images: np.ndarray) -> plt.Figure:
+_COLORS = plt.cm.tab10(np.arange(N_CLASSES))[:, :3]
+
+
+def _make_viz(model, probe: PerClassLocationProbe, cfg: Config, step: int,
+              mnist_images: np.ndarray, by_class: list[np.ndarray]) -> plt.Figure:
     N = 4
+    K = cfg.digits_per_image
     grid = cfg.canvas_grid
     n_regs = model.cfg.n_canvas_registers
-    images, centers, scales = make_batch(
-        mnist_images, N, cfg.image_size, cfg.digit_min_px, cfg.digit_max_px,
+
+    images, centers, present = make_batch(
+        mnist_images, by_class, N, cfg.image_size,
+        cfg.digits_per_image, cfg.digit_px,
     )
     vp = Viewpoint.full_scene(N)
     glimpse = extract_glimpse_at_viewpoint(images, vp, cfg.glimpse_px)
     out = model(glimpse, model.init_state(N, grid), vp)
     spatial = mx.stop_gradient(out.state.canvas[:, n_regs:])
 
-    loc_pred = probes.location(spatial, grid)
-    scale_pred = probes.scale(spatial)
-    attn_map = probes.location.attention_map(spatial, grid)
-    mx.eval(images, centers, scales, loc_pred, scale_pred, attn_map)
+    pred = probe(spatial, grid)  # [N, C, 2]
+    attn = probe.attention_maps(spatial, grid)  # [N, C, G, G]
+    mx.eval(images, centers, present, pred, attn)
 
-    attn_np = np.array(attn_map)  # [N, G, G]
+    present_np = np.array(present)
+    pred_np = np.array(pred)
+    centers_np = np.array(centers)
+    attn_np = np.array(attn)
 
-    fig, axes = plt.subplots(2, N, figsize=(3 * N, 6))
+    n_rows = 1 + K
+    fig, axes = plt.subplots(n_rows, N, figsize=(3.5 * N, 3 * n_rows))
     if N == 1:
         axes = axes[:, None]
+
     for i in range(N):
         img = np.clip(np.array(images[i]) * _STD_NP + _MEAN_NP, 0, 1)
         H, W = img.shape[:2]
-        gy, gx = float(centers[i, 0]), float(centers[i, 1])
-        py, px = float(loc_pred[i, 0]), float(loc_pred[i, 1])
+        present_classes = np.where(present_np[i] > 0.5)[0]
 
-        # Row 0: image + markers
+        # Row 0: image + colored markers per class
         axes[0, i].imshow(img)
-        axes[0, i].plot((gx+1)/2*W, (gy+1)/2*H, "o", color="lime", markersize=8,
-                        markeredgewidth=1.5, markeredgecolor="white")
-        axes[0, i].plot((px+1)/2*W, (py+1)/2*H, "x", color="yellow", markersize=8,
-                        markeredgewidth=2)
-        gs = float(scales[i]) * cfg.image_size
-        axes[0, i].add_patch(plt.Rectangle(
-            ((gx+1)/2*W - gs/2, (gy+1)/2*H - gs/2), gs, gs,
-            linewidth=1.5, edgecolor="lime", facecolor="none", linestyle="--"))
-        ps = float(scale_pred[i]) * cfg.image_size
-        axes[0, i].add_patch(plt.Rectangle(
-            ((px+1)/2*W - ps/2, (py+1)/2*H - ps/2), ps, ps,
-            linewidth=1.5, edgecolor="yellow", facecolor="none", linestyle=":"))
-        axes[0, i].set_title(f"s_gt={float(scales[i]):.2f} s_pred={float(scale_pred[i]):.2f}", fontsize=8)
+        for cls in present_classes:
+            gy, gx = centers_np[i, cls, 0], centers_np[i, cls, 1]
+            py, px = pred_np[i, cls, 0], pred_np[i, cls, 1]
+            color = _COLORS[cls]
+            axes[0, i].plot((gx+1)/2*W, (gy+1)/2*H, "o", color=color,
+                            markersize=8, markeredgewidth=1.5, markeredgecolor="white")
+            axes[0, i].plot((px+1)/2*W, (py+1)/2*H, "x", color=color,
+                            markersize=8, markeredgewidth=2)
+        axes[0, i].set_title(",".join(str(c) for c in present_classes), fontsize=9)
         axes[0, i].axis("off")
 
-        # Row 1: attention heatmap overlaid on image
-        axes[1, i].imshow(img)
-        # Upsample heatmap to image size
-        from scipy.ndimage import zoom as ndzoom
-        hmap = ndzoom(attn_np[i], H / grid, order=0)
-        axes[1, i].imshow(hmap, cmap="hot", alpha=0.6, extent=(0, W, H, 0))
-        axes[1, i].set_title("attention", fontsize=8)
-        axes[1, i].axis("off")
+        # Rows 1..K: per-class attention heatmap
+        for j, cls in enumerate(present_classes[:K]):
+            ax = axes[1 + j, i]
+            ax.imshow(img)
+            hmap = ndzoom(attn_np[i, cls], H / grid, order=0)
+            ax.imshow(hmap, cmap="hot", alpha=0.6, extent=(0, W, H, 0))
+            ax.set_title(f"probe {cls}", fontsize=8, color=_COLORS[cls])
+            ax.axis("off")
 
-    fig.suptitle(f"Step {step} — green=GT, yellow=pred", fontsize=10)
+        for j in range(len(present_classes), K):
+            axes[1 + j, i].set_visible(False)
+
+    fig.suptitle(f"Step {step} — o=GT, x=pred (color=class)", fontsize=10)
     fig.tight_layout()
     return fig
 
@@ -324,7 +370,7 @@ def _make_viz(model, probes: Probes, cfg: Config, step: int,
 def main(cfg: Config) -> None:
     import mlflow
     mlflow.set_experiment("canvas-probes")
-    with mlflow.start_run(run_name="loc+scale"):
+    with mlflow.start_run(run_name="multi-digit"):
         train(cfg)
 
 
