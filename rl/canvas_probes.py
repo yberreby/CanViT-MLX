@@ -311,7 +311,7 @@ def _make_viz(model, probes: Probes, cfg: Config, step: int,
         axes[1, i].imshow(img)
         # Upsample heatmap to image size
         from scipy.ndimage import zoom as ndzoom
-        hmap = ndzoom(attn_np[i], H / grid, order=1)
+        hmap = ndzoom(attn_np[i], H / grid, order=0)
         axes[1, i].imshow(hmap, cmap="hot", alpha=0.6, extent=(0, W, H, 0))
         axes[1, i].set_title("attention", fontsize=8)
         axes[1, i].axis("off")
