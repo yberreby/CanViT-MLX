@@ -63,7 +63,6 @@ depends_on = [
     "canvit_mlx.canvas_attention",
     "canvit_mlx.config",
     "canvit_mlx.grid",
-    "canvit_mlx.layer_scale",
     "canvit_mlx.patch_embed",
     "canvit_mlx.rope",
     "canvit_mlx.glimpse",

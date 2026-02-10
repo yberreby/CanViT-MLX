@@ -143,6 +143,34 @@ def _strip_residual_wrappers(sd: dict[str, torch.Tensor]) -> dict[str, torch.Ten
     return out
 
 
+def _fuse_read_scales_into_out_transform(sd: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    """Absorb read_scales.N.gamma into read_attn.N.out_transform.{weight, bias}.
+
+    LayerScale(gamma) * Linear(W, b)(x) ≡ Linear(diag(gamma) @ W, gamma * b)(x).
+    Eliminates the read_scales parameters entirely.
+    """
+    out: dict[str, torch.Tensor] = {}
+    consumed: set[str] = set()
+    for key in sd:
+        if not key.endswith(".gamma") or "read_scales" not in key:
+            continue
+        # read_scales.N.gamma → read_attn.N.out_transform.{weight, bias}
+        idx = key.split(".")[1]
+        w_key = f"read_attn.{idx}.out_transform.weight"
+        b_key = f"read_attn.{idx}.out_transform.bias"
+        assert w_key in sd, f"missing {w_key} for {key}"
+        assert b_key in sd, f"missing {b_key} for {key}"
+        gamma = sd[key]
+        out[w_key] = sd[w_key] * gamma.unsqueeze(1)
+        out[b_key] = sd[b_key] * gamma
+        log.info("  fuse  %-55s into %-35s", key, w_key)
+        consumed.update((key, w_key, b_key))
+    for key, val in sd.items():
+        if key not in consumed:
+            out[key] = val
+    return out
+
+
 def _remap_state_dict(sd: dict[str, torch.Tensor], map_key) -> dict[str, torch.Tensor]:
     """Remap PT state_dict → MLX-native keys and weight layouts."""
     out: dict[str, torch.Tensor] = {}
@@ -163,6 +191,7 @@ def _remap_state_dict(sd: dict[str, torch.Tensor], map_key) -> dict[str, torch.T
 
     out = _fuse_reparam_layer_scales(out)
     out = _strip_residual_wrappers(out)
+    out = _fuse_read_scales_into_out_transform(out)
 
     total_params = sum(v.numel() for v in out.values())
     log.info("Remapped: %d tensors (%.1fM params), skipped: %d", len(out), total_params / 1e6, skipped)

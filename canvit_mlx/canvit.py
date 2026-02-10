@@ -14,7 +14,6 @@ from .patch_embed import PatchEmbed
 from .canvas_attention import CanvasReadAttention, CanvasWriteAttention
 from .config import CanViTConfig
 from .grid import canvas_coords_for_glimpse, grid_coords
-from .layer_scale import LayerScale
 from .rope import compute_rope, make_rope_periods
 from .glimpse import extract_glimpse_at_viewpoint
 from .viewpoint import Viewpoint
@@ -58,7 +57,6 @@ class CanViT(nn.Module):
         self.read_after_blocks = read_after
         self.write_after_blocks = write_after
         self.read_attn = [CanvasReadAttention(cfg.embed_dim, cfg.canvas_dim, cfg.canvas_num_heads) for _ in read_after]
-        self.read_scales = [LayerScale(cfg.embed_dim) for _ in read_after]
         self.write_attn = [CanvasWriteAttention(cfg.embed_dim, cfg.canvas_dim, cfg.canvas_num_heads) for _ in write_after]
 
         self.canvas_register_init = mx.zeros((1, cfg.n_canvas_registers, cfg.canvas_dim))
@@ -131,7 +129,7 @@ class CanViT(nn.Module):
         for bi in range(cfg.n_blocks):
             local = self.blocks[bi](local, bb_sin, bb_cos)
             if ri < len(self.read_after_blocks) and bi == self.read_after_blocks[ri]:
-                local = local + self.read_scales[ri](self.read_attn[ri](local, canvas, ca_sin, ca_cos, c_sin, c_cos))
+                local = local + self.read_attn[ri](local, canvas, ca_sin, ca_cos, c_sin, c_cos)
                 ri += 1
             if wi < len(self.write_after_blocks) and bi == self.write_after_blocks[wi]:
                 canvas = canvas + self.write_attn[wi](canvas, local, c_sin, c_cos, ca_sin, ca_cos)
