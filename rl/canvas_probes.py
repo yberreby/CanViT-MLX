@@ -122,6 +122,11 @@ class LocationProbe(nn.Module):
         coords = grid_coords(grid_size, grid_size).reshape(1, -1, 2)
         return mx.sum(weights[:, :, None] * coords, axis=1)
 
+    def attention_map(self, spatial: mx.array, grid_size: int) -> mx.array:
+        """Returns [B, G, G] softmax attention weights."""
+        logits = self.proj(self.ln(spatial)).squeeze(-1)
+        return mx.softmax(logits, axis=-1).reshape(-1, grid_size, grid_size)
+
 
 class ScaleProbe(nn.Module):
     """Mean-pool + Linear(D,1) + sigmoid -> scalar in [0, 1]."""
@@ -271,38 +276,46 @@ def _make_viz(model, probes: Probes, cfg: Config, step: int,
 
     loc_pred = probes.location(spatial, grid)
     scale_pred = probes.scale(spatial)
-    mx.eval(images, centers, scales, loc_pred, scale_pred)
+    attn_map = probes.location.attention_map(spatial, grid)
+    mx.eval(images, centers, scales, loc_pred, scale_pred, attn_map)
 
-    fig, axes = plt.subplots(1, N, figsize=(3 * N, 3))
+    attn_np = np.array(attn_map)  # [N, G, G]
+
+    fig, axes = plt.subplots(2, N, figsize=(3 * N, 6))
     if N == 1:
-        axes = [axes]
+        axes = axes[:, None]
     for i in range(N):
         img = np.clip(np.array(images[i]) * _STD_NP + _MEAN_NP, 0, 1)
-        axes[i].imshow(img)
         H, W = img.shape[:2]
-
-        # GT center (green)
         gy, gx = float(centers[i, 0]), float(centers[i, 1])
-        axes[i].plot((gx+1)/2*W, (gy+1)/2*H, "o", color="lime", markersize=8,
-                     markeredgewidth=1.5, markeredgecolor="white")
-        # Predicted center (yellow x)
         py, px = float(loc_pred[i, 0]), float(loc_pred[i, 1])
-        axes[i].plot((px+1)/2*W, (py+1)/2*H, "x", color="yellow", markersize=8,
-                     markeredgewidth=2)
 
-        # GT scale box (green dashed)
+        # Row 0: image + markers
+        axes[0, i].imshow(img)
+        axes[0, i].plot((gx+1)/2*W, (gy+1)/2*H, "o", color="lime", markersize=8,
+                        markeredgewidth=1.5, markeredgecolor="white")
+        axes[0, i].plot((px+1)/2*W, (py+1)/2*H, "x", color="yellow", markersize=8,
+                        markeredgewidth=2)
         gs = float(scales[i]) * cfg.image_size
-        axes[i].add_patch(plt.Rectangle(
+        axes[0, i].add_patch(plt.Rectangle(
             ((gx+1)/2*W - gs/2, (gy+1)/2*H - gs/2), gs, gs,
             linewidth=1.5, edgecolor="lime", facecolor="none", linestyle="--"))
-        # Predicted scale box (yellow dashed)
         ps = float(scale_pred[i]) * cfg.image_size
-        axes[i].add_patch(plt.Rectangle(
+        axes[0, i].add_patch(plt.Rectangle(
             ((px+1)/2*W - ps/2, (py+1)/2*H - ps/2), ps, ps,
             linewidth=1.5, edgecolor="yellow", facecolor="none", linestyle=":"))
+        axes[0, i].set_title(f"s_gt={float(scales[i]):.2f} s_pred={float(scale_pred[i]):.2f}", fontsize=8)
+        axes[0, i].axis("off")
 
-        axes[i].set_title(f"s_gt={float(scales[i]):.2f} s_pred={float(scale_pred[i]):.2f}", fontsize=8)
-        axes[i].axis("off")
+        # Row 1: attention heatmap overlaid on image
+        axes[1, i].imshow(img)
+        # Upsample heatmap to image size
+        from scipy.ndimage import zoom as ndzoom
+        hmap = ndzoom(attn_np[i], H / grid, order=1)
+        axes[1, i].imshow(hmap, cmap="hot", alpha=0.6, extent=(0, W, H, 0))
+        axes[1, i].set_title("attention", fontsize=8)
+        axes[1, i].axis("off")
+
     fig.suptitle(f"Step {step} — green=GT, yellow=pred", fontsize=10)
     fig.tight_layout()
     return fig
