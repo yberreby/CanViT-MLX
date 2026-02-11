@@ -15,7 +15,7 @@ from conftest import (
 
 def _mlx_forward(model, glimpse_mlx, vp, state):
     out = model(glimpse_mlx, state, vp)
-    mx.eval(out.state.canvas, out.state.recurrent_cls, out.ephemeral_cls, out.local_patches)
+    mx.eval(out.state.canvas, out.state.recurrent_cls, out.local_patches)
     return out
 
 
@@ -33,7 +33,6 @@ class TestEndToEnd:
 
         assert_close("e2e_canvas", ref["canvas"], out.state.canvas, atol=2.0, rtol=1e-3)
         assert_close("e2e_cls", ref["recurrent_cls"], out.state.recurrent_cls, atol=1.0, rtol=1e-3)
-        assert_close("e2e_ephemeral", ref["ephemeral_cls"], out.ephemeral_cls, atol=1.0, rtol=1e-3)
         assert_close("e2e_patches", ref["local_patches"], out.local_patches, atol=1.0, rtol=1e-3)
 
     def test_off_center(self, pt_model, mlx_model):
@@ -101,7 +100,6 @@ class TestRunTrajectory:
         # Verify shapes
         for out in outputs:
             assert out.state.canvas.shape[1] == mlx_model.cfg.n_canvas_registers + CANVAS_GRID ** 2
-            assert out.ephemeral_cls.shape == (B, 1, mlx_model.cfg.embed_dim)
 
 
 class TestTeacherHeads:

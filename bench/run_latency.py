@@ -308,7 +308,7 @@ def bench_at_grid(pt_m, mlx_m, mlx_m_bf16, cfg, device, canvas_grid, image_px,
         g = mlx_extract(image_mlx, vp_mlx, GLIMPSE_PX)
         s = mlx_m.init_state(batch_size=B, canvas_grid_size=canvas_grid)
         o = mlx_m(g, s, vp_mlx)
-        mx.eval(o.state.recurrent_cls, o.ephemeral_cls, o.local_patches)
+        mx.eval(o.state.recurrent_cls, o.local_patches)
         return o.state.canvas
 
     rows.append(check_and_bench(
@@ -364,7 +364,7 @@ def bench_at_grid(pt_m, mlx_m, mlx_m_bf16, cfg, device, canvas_grid, image_px,
         g = mlx_extract(image_bf, vp_bf, GLIMPSE_PX)
         s = mlx_m_bf16.init_state(batch_size=B, canvas_grid_size=canvas_grid)
         o = mlx_m_bf16(g, s, vp_bf)
-        mx.eval(o.state.recurrent_cls, o.ephemeral_cls, o.local_patches)
+        mx.eval(o.state.recurrent_cls, o.local_patches)
         return o.state.canvas
 
     bf_fns.append(("full forward", bf_wrap(mlx_full_bf16)))
@@ -605,7 +605,7 @@ def main(grids: tuple[int, ...] = (8, 9, 10, 11, 12, 13, 14, 15, 16,
     pil_image = Image.open(IMAGE_PATH)
 
     n_patches = (GLIMPSE_PX // cfg.patch_size) ** 2
-    n_prefix = (1 if cfg.enable_vpe else 0) + 2 + cfg.n_register_tokens
+    n_prefix = (1 if cfg.enable_vpe else 0) + 1 + cfg.n_register_tokens
     n_local = n_prefix + n_patches
 
     log.info("B=%d, glimpse=%dpx, warmup=%d, budget=%.1fs, iters=%d-%d, seed=%d",

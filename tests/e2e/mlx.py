@@ -15,7 +15,7 @@ def run(model, image: mx.array) -> list[dict[str, np.ndarray]]:
         vp = Viewpoint(centers=mx.array([[cy, cx]]), scales=mx.array([s]))
         glimpse = extract_glimpse_at_viewpoint(image, vp, GLIMPSE_PX)
         out = model(glimpse, state, vp)
-        mx.eval(out.state.canvas, out.state.recurrent_cls, out.ephemeral_cls, out.local_patches)
+        mx.eval(out.state.canvas, out.state.recurrent_cls, out.local_patches)
         results.append({k: np.array(getattr(out.state, k) if k in ("canvas", "recurrent_cls")
                                     else getattr(out, k)) for k in OUTPUTS})
         state = RecurrentState(canvas=out.state.canvas, recurrent_cls=out.state.recurrent_cls)
