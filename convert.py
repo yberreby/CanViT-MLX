@@ -72,9 +72,11 @@ def _make_key_mapper(grid_size: int):
         k = k.replace("scene_cls_head.0.", "scene_cls_ln.")
         k = k.replace("scene_cls_head.1.", "scene_cls_proj.")
 
+        # cls_token and storage_tokens are merged into register_tokens
+        # by _merge_register_tokens() after initial remapping.
         for old, new in [
-            ("backbone.vit.cls_token", "cls_token"),
-            ("backbone.vit.storage_tokens", "storage_tokens"),
+            ("backbone.vit.cls_token", "_cls_token"),
+            ("backbone.vit.storage_tokens", "_storage_tokens"),
         ]:
             if k == old:
                 return new
@@ -100,31 +102,6 @@ def _make_key_mapper(grid_size: int):
 # Weight remapping
 # ---------------------------------------------------------------------------
 
-def _fuse_reparam_layer_scales(sd: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-    """Fuse init_scale + delta_scale → gamma for ReparamLayerScale instances.
-
-    read_attn.N.scale.{init_scale,delta_scale} → read_scales.N.gamma
-    """
-    out: dict[str, torch.Tensor] = {}
-    consumed: set[str] = set()
-    for key in sd:
-        if key.endswith(".scale.init_scale"):
-            prefix = key.removesuffix(".scale.init_scale")
-            delta_key = f"{prefix}.scale.delta_scale"
-            assert delta_key in sd, f"missing {delta_key} for {key}"
-            fused = sd[key] + sd[delta_key]
-            # read_attn.N.scale.init_scale → read_scales.N.gamma
-            new_key = prefix.replace("read_attn", "read_scales") + ".gamma"
-            log.info("  fuse  %-55s → %-35s %s", key, new_key, tuple(fused.shape))
-            out[new_key] = fused
-            consumed.add(key)
-            consumed.add(delta_key)
-    for key, val in sd.items():
-        if key not in consumed:
-            out[key] = val
-    return out
-
-
 def _strip_residual_wrappers(sd: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
     """Strip .attn. wrapper from read/write attention keys.
 
@@ -143,31 +120,32 @@ def _strip_residual_wrappers(sd: dict[str, torch.Tensor]) -> dict[str, torch.Ten
     return out
 
 
-def _fuse_read_scales_into_out_transform(sd: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-    """Absorb read_scales.N.gamma into read_attn.N.out_transform.{weight, bias}.
+def _merge_register_tokens(sd: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
+    """Merge _cls_token and _storage_tokens into a single register_tokens tensor.
 
-    LayerScale(gamma) * Linear(W, b)(x) ≡ Linear(diag(gamma) @ W, gamma * b)(x).
-    Eliminates the read_scales parameters entirely.
+    PT has cls_token [1, 1, D] and storage_tokens [1, N, D] as separate params.
+    MLX treats them as a single register_tokens [1, N+1, D] since they are
+    functionally identical (both are ephemeral learned prefix tokens).
+    The cls_token is prepended to storage_tokens to preserve the original
+    token ordering in the local sequence.
     """
     out: dict[str, torch.Tensor] = {}
-    consumed: set[str] = set()
-    for key in sd:
-        if not key.endswith(".gamma") or "read_scales" not in key:
-            continue
-        # read_scales.N.gamma → read_attn.N.out_transform.{weight, bias}
-        idx = key.split(".")[1]
-        w_key = f"read_attn.{idx}.out_transform.weight"
-        b_key = f"read_attn.{idx}.out_transform.bias"
-        assert w_key in sd, f"missing {w_key} for {key}"
-        assert b_key in sd, f"missing {b_key} for {key}"
-        gamma = sd[key]
-        out[w_key] = sd[w_key] * gamma.unsqueeze(1)
-        out[b_key] = sd[b_key] * gamma
-        log.info("  fuse  %-55s into %-35s", key, w_key)
-        consumed.update((key, w_key, b_key))
+    cls_tok = None
+    storage_toks = None
     for key, val in sd.items():
-        if key not in consumed:
+        if key == "_cls_token":
+            cls_tok = val
+        elif key == "_storage_tokens":
+            storage_toks = val
+        else:
             out[key] = val
+
+    assert cls_tok is not None and storage_toks is not None, \
+        "Expected both _cls_token and _storage_tokens in state_dict"
+    merged = torch.cat([cls_tok, storage_toks], dim=1)
+    log.info("  merge _cls_token %s + _storage_tokens %s → register_tokens %s",
+             tuple(cls_tok.shape), tuple(storage_toks.shape), tuple(merged.shape))
+    out["register_tokens"] = merged
     return out
 
 
@@ -189,9 +167,8 @@ def _remap_state_dict(sd: dict[str, torch.Tensor], map_key) -> dict[str, torch.T
             log.info("  map   %-55s → %-35s %s", pt_key, mlx_key, tuple(val.shape))
         out[mlx_key] = val
 
-    out = _fuse_reparam_layer_scales(out)
     out = _strip_residual_wrappers(out)
-    out = _fuse_read_scales_into_out_transform(out)
+    out = _merge_register_tokens(out)
 
     total_params = sum(v.numel() for v in out.values())
     log.info("Remapped: %d tensors (%.1fM params), skipped: %d", len(out), total_params / 1e6, skipped)
@@ -205,13 +182,15 @@ def _remap_state_dict(sd: dict[str, torch.Tensor], map_key) -> dict[str, torch.T
 def _extract_config(model) -> dict:
     """Build model_config dict from PT model attributes."""
     bb = model.backbone
+    # MLX absorbs the ephemeral CLS token into register_tokens (+1)
+    n_reg = bb.n_register_tokens + 1
     return {
         "embed_dim": bb.embed_dim,
         "num_heads": bb.vit.num_heads,
         "n_blocks": bb.n_blocks,
         "patch_size": bb.vit.patch_size,
         "ffn_ratio": bb.ffn_ratio,
-        "n_register_tokens": bb.n_register_tokens,
+        "n_register_tokens": n_reg,
         "rw_stride": model.cfg.rw_stride,
         "n_canvas_registers": model.cfg.n_canvas_registers,
         "canvas_num_heads": model.cfg.canvas_num_heads,
@@ -249,13 +228,11 @@ def _verify(pt_model, weights_path: str, grid_size: int) -> None:
     vp_mlx = MlxViewpoint.full_scene(batch_size=1)
     state_mlx = mlx_model.init_state(batch_size=1, canvas_grid_size=grid_size)
     out_mlx = mlx_model(glimpse_mlx, state_mlx, vp_mlx)
-    mx.eval(out_mlx.state.canvas, out_mlx.state.recurrent_cls,
-            out_mlx.ephemeral_cls, out_mlx.local_patches)
+    mx.eval(out_mlx.state.canvas, out_mlx.state.recurrent_cls, out_mlx.local_patches)
 
     pairs = [
         ("canvas", out_pt.state.canvas.numpy(), np.array(out_mlx.state.canvas)),
         ("recurrent_cls", out_pt.state.recurrent_cls.numpy(), np.array(out_mlx.state.recurrent_cls)),
-        ("ephemeral_cls", out_pt.ephemeral_cls.numpy(), np.array(out_mlx.ephemeral_cls)),
         ("local_patches", out_pt.local_patches.numpy(), np.array(out_mlx.local_patches)),
     ]
     all_ok = True

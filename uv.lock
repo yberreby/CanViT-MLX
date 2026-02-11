@@ -94,7 +94,7 @@ wheels = [
 [[package]]
 name = "canvit"
 version = "0.1.0"
-source = { git = "ssh://git@github.com/yberreby/CanViT.git#6e84fedb305d1e2113fd518f9fd33a72f4bf4f93" }
+source = { git = "ssh://git@github.com/yberreby/CanViT.git#e885c60ee603fa40a67e7e7b004ef12bcdc8b2c0" }
 dependencies = [
     { name = "dinov3" },
     { name = "dinov3-in1k-probes" },

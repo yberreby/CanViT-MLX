@@ -21,7 +21,7 @@ TRAJECTORY = [
     (-0.3, 0.3, 0.6),   # pan lower-right
 ]
 
-OUTPUTS = ("canvas", "recurrent_cls", "ephemeral_cls", "local_patches")
+OUTPUTS = ("canvas", "recurrent_cls", "local_patches")
 
 # f32 SDPA accumulation error grows with sequence length and through recurrence.
 RTOL = 5e-3

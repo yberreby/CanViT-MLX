@@ -31,7 +31,6 @@ class RecurrentState:
 @dataclass
 class CanViTOutput:
     state: RecurrentState
-    ephemeral_cls: mx.array   # [B, 1, embed_dim]
     local_patches: mx.array   # [B, H*W, embed_dim]
 
 
@@ -49,8 +48,7 @@ class CanViT(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.patch_embed = PatchEmbed(cfg.patch_size, cfg.embed_dim)
-        self.cls_token = mx.zeros((1, 1, cfg.embed_dim))
-        self.storage_tokens = mx.zeros((1, cfg.n_register_tokens, cfg.embed_dim))
+        self.register_tokens = mx.zeros((1, cfg.n_register_tokens, cfg.embed_dim))
         self.blocks = [ViTBlock(cfg.embed_dim, cfg.num_heads, cfg.ffn_ratio) for _ in range(cfg.n_blocks)]
 
         read_after, write_after = _compute_rw_positions(cfg.n_blocks, cfg.rw_stride)
@@ -95,7 +93,7 @@ class CanViT(nn.Module):
         canvas = state.canvas
         patches, H, W = self.patch_embed(glimpse)
 
-        n_prefix = (1 if self.vpe_encoder is not None else 0) + 2 + cfg.n_register_tokens
+        n_prefix = (1 if self.vpe_encoder is not None else 0) + 1 + cfg.n_register_tokens
         expected_local = n_prefix + H * W
 
         parts: list[mx.array] = []
@@ -103,8 +101,7 @@ class CanViT(nn.Module):
             vpe = self.vpe_encoder(viewpoint.centers[:, 0], viewpoint.centers[:, 1], viewpoint.scales)
             parts.append(mx.expand_dims(vpe, 1))
         parts.extend([state.recurrent_cls,
-                       mx.broadcast_to(self.cls_token, (B, 1, cfg.embed_dim)),
-                       mx.broadcast_to(self.storage_tokens, (B, cfg.n_register_tokens, cfg.embed_dim)),
+                       mx.broadcast_to(self.register_tokens, (B, cfg.n_register_tokens, cfg.embed_dim)),
                        patches])
         local = mx.concatenate(parts, axis=1)
         assert local.shape[1] == expected_local, (
@@ -137,12 +134,9 @@ class CanViT(nn.Module):
 
         idx = (1 if self.vpe_encoder is not None else 0)
         new_cls = local[:, idx:idx + 1]
-        idx += 1
-        new_eph = local[:, idx:idx + 1]
         idx += 1 + cfg.n_register_tokens
         return CanViTOutput(
             state=RecurrentState(canvas=canvas, recurrent_cls=new_cls),
-            ephemeral_cls=new_eph,
             local_patches=local[:, idx:idx + H * W],
         )
 
@@ -153,7 +147,7 @@ class CanViT(nn.Module):
         outputs: list[CanViTOutput] = []
         for vp in viewpoints:
             out = self(extract_glimpse_at_viewpoint(image, vp, glimpse_px), state, vp)
-            mx.eval(out.state.canvas, out.state.recurrent_cls, out.ephemeral_cls, out.local_patches)
+            mx.eval(out.state.canvas, out.state.recurrent_cls, out.local_patches)
             state = out.state
             outputs.append(out)
         return outputs

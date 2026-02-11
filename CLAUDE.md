@@ -17,4 +17,4 @@ uv run just                 # readme + lint + typecheck + tach + tests
 - Conv2d weight layout: PyTorch `[O,I,H,W]` → MLX `[O,H,W,I]`.
 - Two RoPE styles (mathematically equivalent): rotate-half (backbone) vs explicit sin/cos split (canvas).
 - f32 SDPA accumulation error grows with sequence length; canvas atol ~5.0 is justified.
-- `convert.py` fuses ReparamLayerScale (init_scale + delta_scale → gamma), strips residual wrappers, and fuses read LayerScale gamma into `out_transform` weights/bias.
+- `convert.py` strips `.attn.` residual wrappers from read/write attention keys.

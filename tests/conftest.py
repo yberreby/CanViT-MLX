@@ -60,7 +60,6 @@ def pt_forward(model, glimpse_pt: torch.Tensor, viewpoint_pt, state_pt) -> dict[
     return {
         "canvas": out.state.canvas.numpy(),
         "recurrent_cls": out.state.recurrent_cls.numpy(),
-        "ephemeral_cls": out.ephemeral_cls.numpy(),
         "local_patches": out.local_patches.numpy(),
     }
 

@@ -122,7 +122,7 @@ def main(grids: tuple[int, ...] = (8, 16, 32, 64, 128),
         def canvit_mlx_fp32():
             g = mlx_extract(image_mlx, vp_mlx, GLIMPSE_PX)
             o = mlx_m(g, mlx_m.init_state(batch_size=B, canvas_grid_size=grid), vp_mlx)
-            mx.eval(o.state.recurrent_cls, o.ephemeral_cls, o.local_patches)
+            mx.eval(o.state.recurrent_cls, o.local_patches)
             mlx_ref[0] = o.state.canvas
             return mlx_ref[0]
 
@@ -136,7 +136,7 @@ def main(grids: tuple[int, ...] = (8, 16, 32, 64, 128),
         def canvit_mlx_bf16():
             g = mlx_extract(image_bf, vp_bf, GLIMPSE_PX)
             o = mlx_m_bf16(g, mlx_m_bf16.init_state(batch_size=B, canvas_grid_size=grid), vp_bf)
-            mx.eval(o.state.recurrent_cls, o.ephemeral_cls, o.local_patches)
+            mx.eval(o.state.recurrent_cls, o.local_patches)
             mlx_ref[0] = o.state.canvas
             return mlx_ref[0]
 
