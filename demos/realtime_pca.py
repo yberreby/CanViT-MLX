@@ -10,15 +10,14 @@ Controls:
 
 Usage:
     uv run python demos/realtime_pca.py
-    uv run python demos/realtime_pca.py --canvas-grid 16 --glimpse-px 224
+    uv run python demos/realtime_pca.py --canvas-grid 16
+    uv run python demos/realtime_pca.py --hf-repo canvit/my-model-mlx
 """
 
 import math
 import time
 from collections import deque
 from dataclasses import dataclass
-from pathlib import Path
-
 import cv2
 import mlx.core as mx
 import numpy as np
@@ -32,13 +31,10 @@ DISPLAY_SIZE = 512
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
-WEIGHTS_DIR = Path(__file__).resolve().parent.parent / "weights"
-DEFAULT_WEIGHTS = str(WEIGHTS_DIR / "canvit-vitb16-pretrain-512px-in21k.safetensors")
-
 
 @dataclass
 class Config:
-    weights: str = DEFAULT_WEIGHTS
+    hf_repo: str = "canvit/canvitb16-vpe-pretrain-g128px-s512px-in21k-dv3b16-mlx"
     canvas_grid: int = 8
     glimpse_px: int = 128
     camera: int = 0
@@ -99,8 +95,8 @@ def preprocess(frame_rgb: np.ndarray) -> mx.array:
 
 
 def main(cfg: Config) -> None:
-    print(f"Loading {cfg.weights}...")
-    model = load_canvit(cfg.weights)
+    print(f"Loading {cfg.hf_repo}...")
+    model = load_canvit(cfg.hf_repo)
     mx.eval(model.parameters())
     n_canvas_regs = model.cfg.n_canvas_registers
     n_params = sum(v.size for _, v in mx.utils.tree_flatten(model.parameters()))
