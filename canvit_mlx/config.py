@@ -3,6 +3,7 @@
 __all__ = ["CanViTConfig"]
 
 from dataclasses import dataclass
+from typing import Literal
 
 
 @dataclass
@@ -20,6 +21,12 @@ class CanViTConfig:
     enable_vpe: bool
     teacher_dim: int
     std_grid_size: int
+    canvas_update_mode: Literal["additive", "convex"] = "additive"
+    gate_bias_init: float | None = None
+
+    def __post_init__(self):
+        assert (self.canvas_update_mode == "convex") == (self.gate_bias_init is not None), \
+            f"convex requires gate_bias_init, got mode={self.canvas_update_mode}, gate_bias_init={self.gate_bias_init}"
 
     @property
     def canvas_dim(self) -> int:
