@@ -41,8 +41,13 @@ class CanvasReadAttention(nn.Module):
 
 
 class CanvasWriteAttention(nn.Module):
-    """Canvas queries local. Dense projections on local side only."""
-    def __init__(self, local_dim: int, canvas_dim: int, num_heads: int):
+    """Canvas queries local. Dense projections on local side only.
+
+    When gate_bias_init is not None, returns the full convex-updated canvas
+    instead of a delta: lerp(canvas, attn_out, sigmoid(Linear(attn_out))).
+    """
+    def __init__(self, local_dim: int, canvas_dim: int, num_heads: int,
+                 gate_bias_init: float | None = None):
         super().__init__()
         assert canvas_dim % num_heads == 0
         self.num_heads = num_heads
@@ -51,6 +56,14 @@ class CanvasWriteAttention(nn.Module):
         self.pre_kv_ln = nn.LayerNorm(local_dim)
         self.k_transform = nn.Linear(local_dim, canvas_dim)
         self.v_transform = nn.Linear(local_dim, canvas_dim)
+        self.gate_linear: nn.Linear | None = None
+        if gate_bias_init is not None:
+            self.gate_linear = nn.Linear(canvas_dim, 1)
+            self.gate_linear.bias = mx.full((1,), gate_bias_init)
+
+    @property
+    def is_convex(self) -> bool:
+        return self.gate_linear is not None
 
     def __call__(self, query: mx.array, kv: mx.array,
                  q_sin: mx.array, q_cos: mx.array, kv_sin: mx.array, kv_cos: mx.array) -> mx.array:
@@ -58,4 +71,8 @@ class CanvasWriteAttention(nn.Module):
         kv_n = self.pre_kv_ln(kv)
         k = apply_rope_with_prefix(_to_mh(self.k_transform(kv_n), self.num_heads), kv_sin, kv_cos)
         v = _to_mh(self.v_transform(kv_n), self.num_heads)
-        return _from_mh(mx.fast.scaled_dot_product_attention(q, k, v, scale=self.scale))
+        attn_out = _from_mh(mx.fast.scaled_dot_product_attention(q, k, v, scale=self.scale))
+        if self.gate_linear is None:
+            return attn_out
+        gate = mx.sigmoid(self.gate_linear(attn_out))
+        return (1 - gate) * query + gate * attn_out

@@ -20,6 +20,8 @@ class CanViTConfig:
     enable_vpe: bool
     teacher_dim: int
     std_grid_size: int
+    canvas_update_mode: str = "additive"  # "additive" or "convex"
+    gate_bias_init: float | None = None
 
     @property
     def canvas_dim(self) -> int:
