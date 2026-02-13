@@ -57,7 +57,6 @@ class CanViT(nn.Module):
         self.read_attn = [CanvasReadAttention(cfg.embed_dim, cfg.canvas_dim, cfg.canvas_num_heads) for _ in read_after]
         self.write_attn = [CanvasWriteAttention(cfg.embed_dim, cfg.canvas_dim, cfg.canvas_num_heads,
                                                 gate_bias_init=cfg.gate_bias_init) for _ in write_after]
-        self._convex_write = cfg.canvas_update_mode == "convex"
 
         self.canvas_register_init = mx.zeros((1, cfg.n_canvas_registers, cfg.canvas_dim))
         self.canvas_spatial_init = mx.zeros((1, 1, cfg.canvas_dim))
@@ -132,7 +131,7 @@ class CanViT(nn.Module):
                 ri += 1
             if wi < len(self.write_after_blocks) and bi == self.write_after_blocks[wi]:
                 write_out = self.write_attn[wi](canvas, local, c_sin, c_cos, ca_sin, ca_cos)
-                canvas = write_out if self._convex_write else canvas + write_out
+                canvas = write_out if self.write_attn[wi].is_convex else canvas + write_out
                 wi += 1
 
         idx = (1 if self.vpe_encoder is not None else 0)
