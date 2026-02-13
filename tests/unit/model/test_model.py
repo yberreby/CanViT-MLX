@@ -21,7 +21,7 @@ class TestPatchEmbed:
     def test_output(self, mlx_model, glimpse_pair, pt_model):
         glimpse_pt, glimpse_mlx = glimpse_pair
         backbone_tokens, H_pt, W_pt = pt_model.backbone.prepare_tokens(glimpse_pt)
-        ref = backbone_tokens[:, 1 + pt_model.backbone.n_register_tokens:].detach().numpy()
+        ref = backbone_tokens[:, pt_model.backbone.n_register_tokens:].detach().numpy()
 
         tokens, H, W = mlx_model.patch_embed(glimpse_mlx)
         mx.eval(tokens)
@@ -33,7 +33,7 @@ class TestVPE:
     def test_full_scene(self, mlx_model, pt_model):
         from canvit.viewpoint import Viewpoint
         vp = Viewpoint.full_scene(batch_size=B, device=torch.device("cpu"))
-        ref = pt_model.vpe_encoder(y=vp.centers[:, 0], x=vp.centers[:, 1], s=vp.scales).detach().numpy()
+        ref = pt_model.vpe(y=vp.centers[:, 0], x=vp.centers[:, 1], s=vp.scales).detach().numpy()
 
         assert mlx_model.vpe_encoder is not None
         got = mlx_model.vpe_encoder(mx.zeros((1,)), mx.zeros((1,)), mx.ones((1,)))

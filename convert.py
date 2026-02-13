@@ -58,35 +58,45 @@ def _make_key_mapper(grid_size: int):
     def map_key(pt_key: str) -> str | None:
         if pt_key.endswith("._initialized") or "qkv.bias_mask" in pt_key:
             return None
-        if pt_key == "backbone.vit.mask_token":
-            return None
-        if pt_key.startswith("backbone.vit.rope_embed.") or pt_key.startswith("backbone.vit.norm."):
+        # MLX model has no output_norm (heads have their own LN)
+        if pt_key.startswith("backbone.output_norm."):
             return None
 
         k = pt_key
-        k = k.replace("backbone.vit.patch_embed.proj.", "patch_embed.proj.")
-        k = k.replace("backbone.vit.blocks.", "blocks.")
+
+        # Strip backbone prefix
+        if k.startswith("backbone."):
+            k = k[len("backbone."):]
+
+        # Canvas attention: PT → MLX naming
+        k = k.replace("canvas_read.", "read_attn.")
+        k = k.replace("canvas_write.", "write_attn.")
+        # Projection naming
+        k = k.replace(".q_proj.", ".q_transform.")
+        k = k.replace(".out_proj.", ".out_transform.")
+        k = k.replace(".k_proj.", ".k_transform.")
+        k = k.replace(".v_proj.", ".v_transform.")
+        # Norm naming
+        k = k.replace(".q_norm.", ".pre_q_ln.")
+        k = k.replace(".kv_norm.", ".pre_kv_ln.")
+
+        # VPE
+        if k.startswith("vpe."):
+            k = "vpe_encoder." + k[len("vpe."):]
         k = k.replace("vpe_encoder.B", "vpe_encoder.B_mat")
-        k = k.replace("scene_patches_head.0.", "scene_patches_ln.")
-        k = k.replace("scene_patches_head.1.", "scene_patches_proj.")
-        k = k.replace("scene_cls_head.0.", "scene_cls_ln.")
-        k = k.replace("scene_cls_head.1.", "scene_cls_proj.")
 
-        # cls_token and storage_tokens are merged into register_tokens
-        # by _merge_register_tokens() after initial remapping.
-        for old, new in [
-            ("backbone.vit.cls_token", "_cls_token"),
-            ("backbone.vit.storage_tokens", "_storage_tokens"),
-        ]:
-            if k == old:
-                return new
+        # Scene prediction heads
+        k = k.replace("scene_patches_head.norm.", "scene_patches_ln.")
+        k = k.replace("scene_patches_head.proj.", "scene_patches_proj.")
+        k = k.replace("scene_cls_head.norm.", "scene_cls_ln.")
+        k = k.replace("scene_cls_head.proj.", "scene_cls_proj.")
 
+        # Standardizers
         for suffix, target in [
             ("mean", "cls_std_mean"), ("var", "cls_std_var"),
         ]:
             if k == f"cls_standardizers.{gs}.{suffix}":
                 return target
-
         for suffix, target in [
             ("mean", "scene_std_mean"), ("var", "scene_std_var"),
         ]:
@@ -102,53 +112,6 @@ def _make_key_mapper(grid_size: int):
 # Weight remapping
 # ---------------------------------------------------------------------------
 
-def _strip_residual_wrappers(sd: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-    """Strip .attn. wrapper from read/write attention keys.
-
-    read_attn.N.attn.X → read_attn.N.X
-    write_attn.N.attn.X → write_attn.N.X
-    """
-    out: dict[str, torch.Tensor] = {}
-    for key, val in sd.items():
-        new_key = key
-        for prefix in ("read_attn.", "write_attn."):
-            if key.startswith(prefix) and ".attn." in key:
-                new_key = key.replace(".attn.", ".", 1)
-                log.info("  unwrap %-54s → %-35s", key, new_key)
-                break
-        out[new_key] = val
-    return out
-
-
-def _merge_register_tokens(sd: dict[str, torch.Tensor]) -> dict[str, torch.Tensor]:
-    """Merge _cls_token and _storage_tokens into a single register_tokens tensor.
-
-    PT has cls_token [1, 1, D] and storage_tokens [1, N, D] as separate params.
-    MLX treats them as a single register_tokens [1, N+1, D] since they are
-    functionally identical (both are ephemeral learned prefix tokens).
-    The cls_token is prepended to storage_tokens to preserve the original
-    token ordering in the local sequence.
-    """
-    out: dict[str, torch.Tensor] = {}
-    cls_tok = None
-    storage_toks = None
-    for key, val in sd.items():
-        if key == "_cls_token":
-            cls_tok = val
-        elif key == "_storage_tokens":
-            storage_toks = val
-        else:
-            out[key] = val
-
-    assert cls_tok is not None and storage_toks is not None, \
-        "Expected both _cls_token and _storage_tokens in state_dict"
-    merged = torch.cat([cls_tok, storage_toks], dim=1)
-    log.info("  merge _cls_token %s + _storage_tokens %s → register_tokens %s",
-             tuple(cls_tok.shape), tuple(storage_toks.shape), tuple(merged.shape))
-    out["register_tokens"] = merged
-    return out
-
-
 def _remap_state_dict(sd: dict[str, torch.Tensor], map_key) -> dict[str, torch.Tensor]:
     """Remap PT state_dict → MLX-native keys and weight layouts."""
     out: dict[str, torch.Tensor] = {}
@@ -160,15 +123,12 @@ def _remap_state_dict(sd: dict[str, torch.Tensor], map_key) -> dict[str, torch.T
             skipped += 1
             continue
         val = val.to(torch.float32).contiguous()
-        if pt_key == "backbone.vit.patch_embed.proj.weight":
+        if mlx_key == "patch_embed.proj.weight":
             val = val.permute(0, 2, 3, 1).contiguous()
             log.info("  conv  %-55s → %-35s %s [OIHW->OHWI]", pt_key, mlx_key, tuple(val.shape))
         else:
             log.info("  map   %-55s → %-35s %s", pt_key, mlx_key, tuple(val.shape))
         out[mlx_key] = val
-
-    out = _strip_residual_wrappers(out)
-    out = _merge_register_tokens(out)
 
     total_params = sum(v.numel() for v in out.values())
     log.info("Remapped: %d tensors (%.1fM params), skipped: %d", len(out), total_params / 1e6, skipped)
@@ -182,22 +142,22 @@ def _remap_state_dict(sd: dict[str, torch.Tensor], map_key) -> dict[str, torch.T
 def _extract_config(model) -> dict:
     """Build model_config dict from PT model attributes."""
     bb = model.backbone
-    # MLX absorbs the ephemeral CLS token into register_tokens (+1)
-    n_reg = bb.n_register_tokens + 1
     return {
         "embed_dim": bb.embed_dim,
-        "num_heads": bb.vit.num_heads,
+        "num_heads": bb.num_heads,
         "n_blocks": bb.n_blocks,
-        "patch_size": bb.vit.patch_size,
+        "patch_size": bb.patch_size_px,
         "ffn_ratio": bb.ffn_ratio,
-        "n_register_tokens": n_reg,
+        "n_register_tokens": bb.n_register_tokens,
         "rw_stride": model.cfg.rw_stride,
         "n_canvas_registers": model.cfg.n_canvas_registers,
         "canvas_num_heads": model.cfg.canvas_num_heads,
         "canvas_head_dim": model.cfg.canvas_head_dim,
         "enable_vpe": model.cfg.enable_vpe,
         "teacher_dim": model.cfg.teacher_dim,
-        "std_grid_size": model.grid_sizes[0],
+        "std_grid_size": model.canvas_patch_grid_sizes[0],
+        "canvas_update_mode": model.cfg.canvas_update_mode,
+        "gate_bias_init": model.cfg.gate_bias_init,
     }
 
 
@@ -266,8 +226,8 @@ def convert(args: Args) -> None:
     sd = pt_model.state_dict()
     log.info("Loaded PT model: %d state_dict keys", len(sd))
 
-    assert len(pt_model.grid_sizes) == 1, f"expected single grid size, got {pt_model.grid_sizes}"
-    grid_size = pt_model.grid_sizes[0]
+    assert len(pt_model.canvas_patch_grid_sizes) == 1, f"expected single grid size, got {pt_model.canvas_patch_grid_sizes}"
+    grid_size = pt_model.canvas_patch_grid_sizes[0]
     log.info("Grid size: %d", grid_size)
 
     weights = _remap_state_dict(sd, _make_key_mapper(grid_size))

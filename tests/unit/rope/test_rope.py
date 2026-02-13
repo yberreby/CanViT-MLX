@@ -37,7 +37,7 @@ class TestSinCos:
         local_pos = canvas_coords_for_glimpse(center=vp.centers, scale=vp.scales, H=8, W=8).flatten(1, 2)
 
         for suffix, hd in [("bb", 64), ("ca", 128)]:
-            periods = pt_make_rope_periods(head_dim=hd, device=torch.device("cpu"))
+            periods = pt_make_rope_periods(head_dim=hd, base=100.0, device=torch.device("cpu"))
             rope = pt_compute_rope(positions=local_pos, periods=periods, dtype=torch.float32)
 
             pos_mlx = mx.array(grid_coords(8, 8).reshape(1, 64, 2))
