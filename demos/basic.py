@@ -102,33 +102,37 @@ def main(cfg: Config) -> None:
     # --- PCA visualization ---
     print("\nGenerating PCA visualization...")
     canvas_spatial = out.state.canvas[:, n_regs:]  # [1, N, canvas_dim]
-
-    # Canvas features (LayerNormed for stable PCA)
-    canvas_ln = mlx.nn.LayerNorm(model.cfg.canvas_dim)(canvas_spatial)
-    canvas_pca = spatial_to_rgb(np.array(canvas_ln[0]))
-
-    # Scene prediction (standardized — raw output of prediction head)
-    scene_pred_std = model.predict_teacher_scene(out.state.canvas)  # [1, N, teacher_dim]
-    scene_std_pca = spatial_to_rgb(np.array(scene_pred_std[0]))
-
-    # Scene prediction (destandardized — reconstructed DINOv3 features)
+    scene_pred_std = model.predict_teacher_scene(out.state.canvas)
     scene_destd = scene_pred_std * mx.sqrt(model.scene_std_var) + model.scene_std_mean
-    scene_destd_pca = spatial_to_rgb(np.array(scene_destd[0]))
 
-    # Input image for display
+    panels = [
+        ("Canvas (raw)",         spatial_to_rgb(np.array(canvas_spatial[0]))),
+        ("Canvas (LN)",          spatial_to_rgb(np.array(mlx.nn.LayerNorm(model.cfg.canvas_dim)(canvas_spatial)[0]))),
+        ("Scene pred (std)",     spatial_to_rgb(np.array(scene_pred_std[0]))),
+        ("Scene pred (destd)",   spatial_to_rgb(np.array(scene_destd[0]))),
+    ]
+
     from PIL import Image
     img_display = np.array(Image.open(cfg.image).convert("RGB"))
 
-    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
-    for ax, img, title in zip(axes, [img_display, canvas_pca, scene_std_pca, scene_destd_pca], [
-        "Input", "Canvas (LN + PCA)", "Scene pred (standardized)", "Scene pred (destandardized)"
-    ]):
+    fig = plt.figure(figsize=(12, 6))
+    gs = fig.add_gridspec(2, 4, hspace=0.15, wspace=0.1)
+
+    # Input image: left half
+    ax_img = fig.add_subplot(gs[:, :2])
+    ax_img.imshow(img_display)
+    ax_img.set_title("Input")
+    ax_img.axis("off")
+
+    # 2x2 PCA grid: right half
+    for i, (title, img) in enumerate(panels):
+        ax = fig.add_subplot(gs[i // 2, 2 + i % 2])
         ax.imshow(img)
-        ax.set_title(title)
+        ax.set_title(title, fontsize=9)
         ax.axis("off")
-    plt.tight_layout()
+
     cfg.output.parent.mkdir(parents=True, exist_ok=True)
-    plt.savefig(cfg.output, dpi=150)
+    plt.savefig(cfg.output, dpi=150, bbox_inches="tight")
     print(f"  saved: {cfg.output}")
 
 
