@@ -157,7 +157,7 @@ dev = [
     { name = "mlflow", specifier = ">=3.9.0" },
     { name = "optuna", specifier = ">=4.7.0" },
     { name = "polars", specifier = ">=1.38.1" },
-    { name = "pypatree", specifier = ">=0.2.0" },
+    { name = "pypatree", specifier = ">=0.4.0" },
     { name = "pytest", specifier = ">=9.0.2" },
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "ruff", specifier = ">=0.15.0" },
@@ -2060,15 +2060,15 @@ wheels = [
 
 [[package]]
 name = "pypatree"
-version = "0.3.0"
+version = "0.4.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "rich" },
     { name = "tyro" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/90/4e/761c9b3a6c20229b54308b21cd80e047540c54e34d712248eb95108b43ef/pypatree-0.3.0.tar.gz", hash = "sha256:72918142da9ffde4b222f3b59416b597108f822668041a36cb1ed92edc6faa97", size = 72263, upload-time = "2025-12-09T19:01:47.013Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/d4/ac/fb35ab6bba17b00610e278db92a3d6cec9f78b23bffb0c73380b7a1bedd9/pypatree-0.4.0.tar.gz", hash = "sha256:19586563475c1ab00a6343759409a443365964c0b947436797d4eee652a11c96", size = 73940, upload-time = "2026-02-14T17:48:47.269Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fc/48/6ff9c5b3a1f473c649aefa491cda03d5e740156719e6b34981fdb7db58ad/pypatree-0.3.0-py3-none-any.whl", hash = "sha256:93d4455f3eaa15d95d927fe277f66d4dd53f1d2dc6d48d7bedc30287f5e45df9", size = 15937, upload-time = "2025-12-09T19:01:47.816Z" },
+    { url = "https://files.pythonhosted.org/packages/d1/4b/4057b7b43b46061f2ba96301f14ee30eaabb5aa9e5e175b0cdf3e09a0b0c/pypatree-0.4.0-py3-none-any.whl", hash = "sha256:eb558c5fd2a50dee6827d32233842bdde1362b64644de4d6b755a1b91a166360", size = 17724, upload-time = "2026-02-14T17:48:45.967Z" },
 ]
 
 [[package]]
