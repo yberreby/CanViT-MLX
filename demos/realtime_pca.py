@@ -1,7 +1,7 @@
 """Real-time webcam PCA visualization with CanViT on MLX.
 
 Fresh state each frame (t=0), full-scene viewpoint.
-Displays: webcam feed | canvas PCA features.
+Displays: glimpse (what the model sees) | canvas PCA features.
 
 Controls:
     q               quit
@@ -9,9 +9,9 @@ Controls:
     up/down         change canvas grid size
 
 Usage:
-    uv run python demos/realtime_pca.py
-    uv run python demos/realtime_pca.py --canvas-grid 16
-    uv run python demos/realtime_pca.py --hf-repo canvit/my-model-mlx
+    uv run --group demos python demos/realtime_pca.py
+    uv run --group demos python demos/realtime_pca.py --canvas-grid 16
+    uv run --group demos python demos/realtime_pca.py --hf-repo canvit/my-model-mlx
 """
 
 import math
@@ -20,12 +20,13 @@ from collections import deque
 from dataclasses import dataclass
 import cv2
 import mlx.core as mx
+import mlx.nn
 import numpy as np
 import tyro
 from numpy.typing import NDArray
 from sklearn.decomposition import PCA
 
-from canvit_mlx import load_canvit, Viewpoint
+from canvit_mlx import load_canvit, Viewpoint, extract_glimpse_at_viewpoint
 
 DISPLAY_SIZE = 512
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -35,6 +36,7 @@ IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 @dataclass
 class Config:
     hf_repo: str = "canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16-mlx"
+    scene_size: int = 512
     canvas_grid: int = 8
     glimpse_px: int = 128
     camera: int = 0
@@ -75,23 +77,26 @@ class TemporalPCA:
         return (rgb.reshape(grid, grid, 3) * 255).astype(np.uint8)
 
 
-def capture_frame(cap: cv2.VideoCapture, size: int) -> np.ndarray:
-    """Center-crop square, resize, return uint8 RGB [H,W,3]."""
+def capture_scene(cap: cv2.VideoCapture, scene_size: int) -> tuple[np.ndarray, mx.array]:
+    """Capture webcam frame → (display_rgb uint8, scene float32 [1,H,W,3]).
+
+    Resize shortest edge, center crop to square, ImageNet normalize.
+    """
     ret, frame = cap.read()
     assert ret, "Failed to capture"
+    frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     h, w = frame.shape[:2]
-    crop = min(h, w)
-    y0, x0 = (h - crop) // 2, (w - crop) // 2
-    frame = frame[y0:y0+crop, x0:x0+crop]
-    frame = cv2.resize(frame, (size, size), interpolation=cv2.INTER_AREA)
-    return cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-
-
-def preprocess(frame_rgb: np.ndarray) -> mx.array:
-    """RGB uint8 [H,W,3] -> ImageNet-normalized [1,H,W,3] float32."""
-    x = frame_rgb.astype(np.float32) / 255.0
-    x = (x - IMAGENET_MEAN) / IMAGENET_STD
-    return mx.array(x)[None]
+    # Resize shortest edge to scene_size
+    scale = scene_size / min(h, w)
+    frame = cv2.resize(frame, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_AREA)
+    # Center crop
+    h, w = frame.shape[:2]
+    y0, x0 = (h - scene_size) // 2, (w - scene_size) // 2
+    frame = frame[y0:y0 + scene_size, x0:x0 + scene_size]
+    # Normalize
+    scene = frame.astype(np.float32) / 255.0
+    scene = (scene - IMAGENET_MEAN) / IMAGENET_STD
+    return frame, mx.array(scene)[None]
 
 
 def main(cfg: Config) -> None:
@@ -99,7 +104,7 @@ def main(cfg: Config) -> None:
     model = load_canvit(cfg.hf_repo)
     mx.eval(model.parameters())
     n_canvas_regs = model.cfg.n_canvas_registers
-    n_params = sum(v.size for _, v in mx.utils.tree_flatten(model.parameters()))
+    n_params = sum(v.size for _, v in mlx.nn.utils.tree_flatten(model.parameters()))
     print(f"  {n_params / 1e6:.1f}M params | {model.cfg.embed_dim}d, {model.cfg.n_blocks} blocks, canvas {model.cfg.canvas_dim}d")
 
     vp = Viewpoint.full_scene(1)
@@ -116,8 +121,8 @@ def main(cfg: Config) -> None:
     while True:
         t0 = time.monotonic()
 
-        frame_rgb = capture_frame(cap, cfg.glimpse_px)
-        glimpse = preprocess(frame_rgb)
+        display_rgb, scene = capture_scene(cap, cfg.scene_size)
+        glimpse = extract_glimpse_at_viewpoint(scene, vp, glimpse_size_px=cfg.glimpse_px)
 
         state = model.init_state(1, canvas_grid)
         out = model(glimpse, state, vp)
@@ -130,7 +135,11 @@ def main(cfg: Config) -> None:
         fps_buf.append(1.0 / elapsed if elapsed > 0 else 0)
         fps = np.mean(fps_buf)
 
-        input_vis = cv2.resize(cv2.cvtColor(frame_rgb, cv2.COLOR_RGB2BGR), (DISPLAY_SIZE, DISPLAY_SIZE))
+        # Show the glimpse (what the model actually sees) and PCA side by side
+        glimpse_rgb = np.array(glimpse[0] * mx.array(IMAGENET_STD) + mx.array(IMAGENET_MEAN))
+        glimpse_rgb = np.clip(glimpse_rgb * 255, 0, 255).astype(np.uint8)
+        input_vis = cv2.resize(cv2.cvtColor(glimpse_rgb, cv2.COLOR_RGB2BGR),
+                               (DISPLAY_SIZE, DISPLAY_SIZE), interpolation=cv2.INTER_NEAREST)
         pca_vis = cv2.resize(cv2.cvtColor(pca_rgb, cv2.COLOR_RGB2BGR),
                              (DISPLAY_SIZE, DISPLAY_SIZE), interpolation=cv2.INTER_NEAREST)
 

@@ -21,6 +21,14 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [dependency-groups]
+demos = [
+    "huggingface_hub>=0.30",
+    "matplotlib>=3.10.8",
+    "opencv-python>=4.11",
+    "pillow>=11.0",
+    "scikit-learn>=1.8.0",
+    "tyro>=1.0.6",
+]
 dev = [
     "basedpyright>=1.37.4",
     "canvit",

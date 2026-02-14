@@ -26,8 +26,9 @@ output = model(glimpse, state, vp)
 - **`demos/realtime_pca.py`** — Live webcam canvas PCA visualization.
 
 ```bash
-uv run python demos/basic.py
-uv run python demos/basic.py --image test_data/Cat03.jpg --canvas-grid 64
+uv run --group demos python demos/basic.py
+uv run --group demos python demos/basic.py --image test_data/Cat03.jpg --canvas-grid 64
+uv run --group demos python demos/realtime_pca.py
 ```
 
 ## Module tree
