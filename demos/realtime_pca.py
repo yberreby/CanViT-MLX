@@ -34,7 +34,7 @@ IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
 @dataclass
 class Config:
-    hf_repo: str = "canvit/canvitb16-vpe-pretrain-g128px-s512px-in21k-dv3b16-mlx"
+    hf_repo: str = "canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16-mlx"
     canvas_grid: int = 8
     glimpse_px: int = 128
     camera: int = 0

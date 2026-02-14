@@ -18,7 +18,7 @@ from .config import CanViTConfig
 
 log = logging.getLogger(__name__)
 
-DEFAULT_HF_REPO = "canvit/canvitb16-vpe-pretrain-g128px-s512px-in21k-dv3b16-mlx"
+DEFAULT_HF_REPO = "canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16-mlx"
 
 
 def _load_local(weights_path: Path, config_path: Path) -> CanViT:

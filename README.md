@@ -25,7 +25,7 @@ output = model(glimpse, state, Viewpoint.full_scene(batch_size=1))
 ## Weight conversion
 
 Pre-converted MLX weights are hosted on HF Hub at
-[`canvit/canvitb16-vpe-pretrain-g128px-s512px-in21k-dv3b16-mlx`](https://huggingface.co/canvit/canvitb16-vpe-pretrain-g128px-s512px-in21k-dv3b16-mlx).
+[`canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16-mlx`](https://huggingface.co/canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16-mlx).
 `load_canvit()` downloads them automatically.
 
 To convert from the PyTorch checkpoint yourself:
