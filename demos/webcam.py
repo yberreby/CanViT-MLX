@@ -10,9 +10,9 @@ Controls:
     up/down         change canvas grid size
 
 Usage:
-    uv run --group demos python demos/realtime_pca.py
-    uv run --group demos python demos/realtime_pca.py --canvas-grid 16
-    uv run --group demos python demos/realtime_pca.py --hf-repo canvit/my-model-mlx
+    uv run --group demos python demos/webcam.py
+    uv run --group demos python demos/webcam.py --canvas-grid 16
+    uv run --group demos python demos/webcam.py --hf-repo canvit/my-model-mlx
 """
 
 import math
