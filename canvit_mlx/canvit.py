@@ -34,12 +34,14 @@ class CanViTOutput:
     local_patches: mx.array   # [B, H*W, embed_dim]
 
 
-def _compute_rw_positions(n_blocks: int, rw_stride: int) -> tuple[list[int], list[int]]:
+def _compute_rw_positions(n_blocks: int, rw_stride: int, *, enable_reads: bool) -> tuple[list[int], list[int]]:
     read_after, write_after = [], []
     for i, pos in enumerate(range(rw_stride - 1, n_blocks, rw_stride)):
         (read_after if i % 2 == 0 else write_after).append(pos)
     if not write_after or write_after[-1] != n_blocks - 1:
         write_after.append(n_blocks - 1)
+    if not enable_reads:
+        read_after = []
     return read_after, write_after
 
 
@@ -48,10 +50,10 @@ class CanViT(nn.Module):
         super().__init__()
         self.cfg = cfg
         self.patch_embed = PatchEmbed(cfg.patch_size, cfg.embed_dim)
-        self.register_tokens = mx.zeros((1, cfg.n_register_tokens, cfg.embed_dim))
+        self.backbone_registers = mx.zeros((1, cfg.n_backbone_registers, cfg.embed_dim))
         self.blocks = [ViTBlock(cfg.embed_dim, cfg.num_heads, cfg.ffn_ratio) for _ in range(cfg.n_blocks)]
 
-        read_after, write_after = _compute_rw_positions(cfg.n_blocks, cfg.rw_stride)
+        read_after, write_after = _compute_rw_positions(cfg.n_blocks, cfg.rw_stride, enable_reads=cfg.enable_reads)
         self.read_after_blocks = read_after
         self.write_after_blocks = write_after
         self.read_attn = [CanvasReadAttention(cfg.embed_dim, cfg.canvas_dim, cfg.canvas_num_heads) for _ in read_after]
@@ -94,7 +96,7 @@ class CanViT(nn.Module):
         canvas = state.canvas
         patches, H, W = self.patch_embed(glimpse)
 
-        n_prefix = (1 if self.vpe_encoder is not None else 0) + 1 + cfg.n_register_tokens
+        n_prefix = (1 if self.vpe_encoder is not None else 0) + 1 + cfg.n_backbone_registers
         expected_local = n_prefix + H * W
 
         parts: list[mx.array] = []
@@ -102,26 +104,21 @@ class CanViT(nn.Module):
             vpe = self.vpe_encoder(viewpoint.centers[:, 0], viewpoint.centers[:, 1], viewpoint.scales)
             parts.append(mx.expand_dims(vpe, 1))
         parts.extend([state.recurrent_cls,
-                       mx.broadcast_to(self.register_tokens, (B, cfg.n_register_tokens, cfg.embed_dim)),
+                       mx.broadcast_to(self.backbone_registers, (B, cfg.n_backbone_registers, cfg.embed_dim)),
                        patches])
         local = mx.concatenate(parts, axis=1)
         assert local.shape[1] == expected_local, (
             f"token packing: expected {expected_local}, got {local.shape[1]}")
 
         local_pos = canvas_coords_for_glimpse(viewpoint.centers, viewpoint.scales, H, W)
-        # RoPE: compute in f32 for precision, cast once to working dtype.
-        # apply_rope_with_prefix assumes sin/cos already match Q/K dtype.
-        dtype = patches.dtype
+        # RoPE sin/cos stay f32; apply_rope_with_prefix upcasts x for rotation.
         bb_sin, bb_cos = compute_rope(local_pos, make_rope_periods(cfg.head_dim))
-        bb_sin, bb_cos = bb_sin.astype(dtype), bb_cos.astype(dtype)
         ca_sin, ca_cos = compute_rope(local_pos, make_rope_periods(cfg.canvas_head_dim))
-        ca_sin, ca_cos = ca_sin.astype(dtype), ca_cos.astype(dtype)
         n_cs = canvas.shape[1] - cfg.n_canvas_registers
         cg = int(math.sqrt(n_cs))
         assert cg * cg == n_cs, f"canvas spatial tokens ({n_cs}) must be a perfect square"
         sp = mx.broadcast_to(grid_coords(cg, cg).reshape(1, -1, 2), (B, n_cs, 2))
         c_sin, c_cos = compute_rope(sp, make_rope_periods(cfg.canvas_head_dim))
-        c_sin, c_cos = c_sin.astype(dtype), c_cos.astype(dtype)
 
         ri, wi = 0, 0
         for bi in range(cfg.n_blocks):
@@ -136,7 +133,7 @@ class CanViT(nn.Module):
 
         idx = (1 if self.vpe_encoder is not None else 0)
         new_cls = local[:, idx:idx + 1]
-        idx += 1 + cfg.n_register_tokens
+        idx += 1 + cfg.n_backbone_registers
         return CanViTOutput(
             state=RecurrentState(canvas=canvas, recurrent_cls=new_cls),
             local_patches=local[:, idx:idx + H * W],

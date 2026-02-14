@@ -88,7 +88,7 @@ wheels = [
 [[package]]
 name = "canvit"
 version = "0.1.0"
-source = { git = "ssh://git@github.com/yberreby/CanViT.git#493c1b6ed2a24c23591886c7b7ac4ad8546dc951" }
+source = { git = "ssh://git@github.com/yberreby/CanViT.git#6e7ab5335ea359e597b46d79917e83e60dcf523c" }
 dependencies = [
     { name = "dinov3-in1k-probes" },
     { name = "huggingface-hub" },
@@ -3036,7 +3036,7 @@ wheels = [
 [[package]]
 name = "ybml"
 version = "0.1.0"
-source = { git = "https://github.com/yberreby/ybml.git?rev=133cc9b#133cc9b2333327d5ee671ceccb3fd03a6747822a" }
+source = { git = "https://github.com/yberreby/ybml.git?rev=b161368#b161368e8ab23a5cf1da6e2c807d5d989fff5504" }
 dependencies = [
     { name = "jaxtyping" },
     { name = "numpy" },

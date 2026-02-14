@@ -13,11 +13,21 @@ uv run just                        # lint + typecheck + dep enforcement + tests
 from canvit_mlx import load_canvit, load_and_preprocess, Viewpoint, extract_glimpse_at_viewpoint
 
 image = load_and_preprocess("test_data/Cat03.jpg", target_size=512)
-model = load_canvit("weights/canvit-vitb16-pretrain-512px-in21k.safetensors")
+model = load_canvit("canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16-mlx")
 state = model.init_state(batch_size=1, canvas_grid_size=32)
 vp = Viewpoint.full_scene(batch_size=1)
 glimpse = extract_glimpse_at_viewpoint(image, vp, glimpse_size_px=128)
 output = model(glimpse, state, vp)
+```
+
+## Demos
+
+- **`demos/basic.py`** — Load from HF Hub, classify an image with a linear probe, visualize canvas PCA.
+- **`demos/realtime_pca.py`** — Live webcam canvas PCA visualization.
+
+```bash
+uv run python demos/basic.py
+uv run python demos/basic.py --image test_data/Cat03.jpg --canvas-grid 64
 ```
 
 ## Module tree

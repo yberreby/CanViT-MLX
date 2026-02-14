@@ -8,20 +8,27 @@ from canvit_mlx.canvit import _compute_rw_positions
 from conftest import assert_close, B, CANVAS_GRID
 
 
-@pytest.mark.parametrize("n_blocks,rw_stride,expect_writes", [
-    (12, 2, [3, 7, 11]),   # current config — last block is naturally a write
-    (10, 2, [3, 7, 9]),    # forced append of last block
+@pytest.mark.parametrize("n_blocks,rw_stride,expect_reads,expect_writes", [
+    (12, 2, [1, 5, 9], [3, 7, 11]),
+    (10, 2, [1, 5, 9], [3, 7, 9]),
 ])
-def test_rw_positions(n_blocks, rw_stride, expect_writes):
-    _, writes = _compute_rw_positions(n_blocks, rw_stride)
+def test_rw_positions(n_blocks, rw_stride, expect_reads, expect_writes):
+    reads, writes = _compute_rw_positions(n_blocks, rw_stride, enable_reads=True)
+    assert reads == expect_reads
     assert writes == expect_writes
+
+
+def test_rw_positions_reads_disabled():
+    reads, writes = _compute_rw_positions(12, 2, enable_reads=False)
+    assert reads == []
+    assert writes == [3, 7, 11]
 
 
 class TestPatchEmbed:
     def test_output(self, mlx_model, glimpse_pair, pt_model):
         glimpse_pt, glimpse_mlx = glimpse_pair
-        backbone_tokens, H_pt, W_pt = pt_model.backbone.prepare_tokens(glimpse_pt)
-        ref = backbone_tokens[:, pt_model.backbone.n_register_tokens:].detach().numpy()
+        ref_tokens, H_pt, W_pt = pt_model.backbone.patch_embed(glimpse_pt)
+        ref = ref_tokens.detach().numpy()
 
         tokens, H, W = mlx_model.patch_embed(glimpse_mlx)
         mx.eval(tokens)

@@ -13,7 +13,7 @@ class CanViTConfig:
     n_blocks: int
     patch_size: int
     ffn_ratio: float
-    n_register_tokens: int
+    n_backbone_registers: int
     rw_stride: int
     n_canvas_registers: int
     canvas_num_heads: int
@@ -21,6 +21,7 @@ class CanViTConfig:
     enable_vpe: bool
     teacher_dim: int
     std_grid_size: int
+    enable_reads: bool = True
     canvas_update_mode: Literal["additive", "convex"] = "additive"
     gate_bias_init: float | None = None
 

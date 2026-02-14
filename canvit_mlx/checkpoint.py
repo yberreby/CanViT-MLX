@@ -41,8 +41,7 @@ def _download_from_hub(repo_id: str) -> tuple[Path, Path]:
         from huggingface_hub import hf_hub_download
     except ImportError:
         raise ImportError(
-            f"huggingface_hub is required to load from HF Hub ({repo_id!r}). "
-            "Install the [hub] extra to enable this."
+            f"huggingface_hub is required to load from HF Hub ({repo_id!r}). Install the [hub] extra to enable this."
         ) from None
     log.info("Downloading from HF Hub: %s", repo_id)
     weights = Path(hf_hub_download(repo_id, "model.safetensors"))

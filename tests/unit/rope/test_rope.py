@@ -38,7 +38,7 @@ class TestSinCos:
 
         for suffix, hd in [("bb", 64), ("ca", 128)]:
             periods = pt_make_rope_periods(head_dim=hd, base=100.0, device=torch.device("cpu"))
-            rope = pt_compute_rope(positions=local_pos, periods=periods, dtype=torch.float32)
+            rope = pt_compute_rope(positions=local_pos, periods=periods)
 
             pos_mlx = mx.array(grid_coords(8, 8).reshape(1, 64, 2))
             sin, cos = compute_rope(pos_mlx, make_rope_periods(hd))
