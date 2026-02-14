@@ -23,7 +23,7 @@ output = model(glimpse, state, vp)
 ## Demos
 
 - **`demos/basic.py`** — Load from HF Hub, classify an image with a linear probe, visualize canvas PCA.
-- **`demos/realtime_pca.py`** — Live webcam canvas PCA visualization.
+- **`demos/realtime_pca.py`** — Live webcam canvas PCA (single full-scene glimpse per frame, no recurrence).
 
 ```bash
 uv run --group demos python demos/basic.py

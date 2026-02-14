@@ -1,7 +1,8 @@
 """Real-time webcam PCA visualization with CanViT on MLX.
 
-Fresh state each frame (t=0), full-scene viewpoint.
-Displays: glimpse (what the model sees) | canvas PCA features.
+Single full-scene glimpse per frame, fresh canvas each time (no recurrence).
+The model is not yet trained on video — this is a non-recurrent visualization
+of what a single t=0 step produces from each webcam frame.
 
 Controls:
     q               quit
