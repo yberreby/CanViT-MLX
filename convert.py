@@ -170,7 +170,7 @@ def _verify(pt_model, weights_path: str, grid_size: int) -> None:
     """Load converted weights, run one forward pass, compare against PT reference."""
     import mlx.core as mx
     from canvit.viewpoint import Viewpoint as PtViewpoint
-    from canvit_mlx import Viewpoint as MlxViewpoint, load_canvit
+    from canvit_mlx import Viewpoint as MlxViewpoint, load_from_local
 
     log.info("--- Verification: full-scene forward pass ---")
     log.info("  seed=%d  glimpse=%dpx  canvas_grid=%d  atol=%.1f  rtol=%.0e",
@@ -185,7 +185,8 @@ def _verify(pt_model, weights_path: str, grid_size: int) -> None:
     with torch.inference_mode():
         out_pt = pt_model(glimpse=glimpse_pt, state=state_pt, viewpoint=vp_pt)
 
-    mlx_model = load_canvit(weights_path)
+    w = Path(weights_path)
+    mlx_model = load_from_local(w, w.with_suffix(".json"))
     vp_mlx = MlxViewpoint.full_scene(batch_size=1)
     state_mlx = mlx_model.init_state(batch_size=1, canvas_grid_size=grid_size)
     out_mlx = mlx_model(glimpse_mlx, state_mlx, vp_mlx)

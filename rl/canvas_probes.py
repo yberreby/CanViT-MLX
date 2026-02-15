@@ -31,7 +31,7 @@ from mlx.utils import tree_flatten
 from scipy.ndimage import zoom as ndzoom
 from tqdm import tqdm
 
-from canvit_mlx import Viewpoint, extract_glimpse_at_viewpoint, load_canvit
+from canvit_mlx import Viewpoint, extract_glimpse_at_viewpoint, load_from_local
 from canvit_mlx.grid import grid_coords
 
 log = logging.getLogger(__name__)
@@ -151,7 +151,8 @@ def train(cfg: Config) -> None:
     by_class = indices_by_class(mnist_labels)
     log.info("MNIST: %d images", len(mnist_images))
 
-    model = load_canvit(cfg.weights)
+    w = Path(cfg.weights)
+    model = load_from_local(w, w.with_suffix(".json"))
     model.freeze()
     n_regs = model.cfg.n_canvas_registers
     grid = cfg.canvas_grid

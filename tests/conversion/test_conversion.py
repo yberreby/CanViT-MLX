@@ -15,7 +15,7 @@ def test_convert_produces_loadable_weights(tmp_path):
     assert out.exists()
     assert out.with_suffix(".json").exists()
 
-    from canvit_mlx import load_canvit
-    model = load_canvit(str(out))
+    from canvit_mlx import load_from_local
+    model = load_from_local(out, out.with_suffix(".json"))
     assert model.cfg.embed_dim == 768
     assert len(model.blocks) == 12

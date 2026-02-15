@@ -10,10 +10,10 @@ uv run just                        # lint + typecheck + dep enforcement + tests
 ```
 
 ```python
-from canvit_mlx import load_canvit, load_and_preprocess, Viewpoint, extract_glimpse_at_viewpoint
+from canvit_mlx import load_from_hf_hub, load_and_preprocess, Viewpoint, extract_glimpse_at_viewpoint
 
 image = load_and_preprocess("test_data/Cat03.jpg", target_size=512)
-model = load_canvit("canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16-mlx")
+model = load_from_hf_hub("canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16-mlx")
 state = model.init_state(batch_size=1, canvas_grid_size=32)
 vp = Viewpoint.full_scene(batch_size=1)
 glimpse = extract_glimpse_at_viewpoint(image, vp, glimpse_size_px=128)
@@ -48,7 +48,11 @@ canvit_mlx  CanViT inference on Apple Silicon via MLX.
 │   └── RecurrentState(canvas: mlx.core.array, recurrent_cls: mlx.core.array) ->
 │       None
 ├── checkpoint  Load a CanViT model from pre-converted MLX safetensors.
-│   └── load_canvit(source: str) -> canvit_mlx.canvit.CanViT
+│   ├── load_from_hf_hub(repo_id: str) -> canvit_mlx.canvit.CanViT
+│   └── load_from_local(
+│           weights_path: pathlib.Path,
+│           config_path: pathlib.Path,
+│       ) -> canvit_mlx.canvit.CanViT
 ├── config  Model hyperparameters and architecture configuration.
 │   └── CanViTConfig()
 ├── glimpse  Bilinear glimpse extraction from an image at a given viewpoint.

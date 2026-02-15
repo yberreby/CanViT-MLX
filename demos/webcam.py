@@ -29,7 +29,7 @@ import tyro
 from numpy.typing import NDArray
 from sklearn.decomposition import PCA
 
-from canvit_mlx import load_canvit, Viewpoint, extract_glimpse_at_viewpoint
+from canvit_mlx import load_from_hf_hub, Viewpoint, extract_glimpse_at_viewpoint
 
 DISPLAY_SIZE = 512
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
@@ -147,7 +147,7 @@ def glimpse_to_display(glimpse: mx.array) -> np.ndarray:
 
 def main(cfg: Config) -> None:
     print(f"Loading {cfg.model_repo}...")
-    model = load_canvit(cfg.model_repo)
+    model = load_from_hf_hub(cfg.model_repo)
     mx.eval(model.parameters())
     n_canvas_regs = model.cfg.n_canvas_registers
     n_params = sum(v.size for _, v in mlx.nn.utils.tree_flatten(model.parameters()))

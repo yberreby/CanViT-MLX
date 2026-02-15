@@ -20,7 +20,7 @@ from numpy.typing import NDArray
 from safetensors import safe_open
 from sklearn.decomposition import PCA
 
-from canvit_mlx import Viewpoint, load_canvit, load_and_preprocess
+from canvit_mlx import Viewpoint, load_from_hf_hub, load_and_preprocess
 
 HF_REPO = "canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16-mlx"
 PROBE_REPO = "yberreby/dinov3-vitb16-lvd1689m-in1k-512x512-linear-clf-probe"
@@ -56,7 +56,7 @@ def spatial_to_rgb(spatial: NDArray) -> NDArray[np.uint8]:
 def main(cfg: Config) -> None:
     # Load model
     print(f"Loading {cfg.hf_repo}...")
-    model = load_canvit(cfg.hf_repo)
+    model = load_from_hf_hub(cfg.hf_repo)
     mx.eval(model.parameters())
     n_params = sum(v.size for _, v in mlx.nn.utils.tree_flatten(model.parameters()))
     print(f"  {n_params / 1e6:.1f}M params")

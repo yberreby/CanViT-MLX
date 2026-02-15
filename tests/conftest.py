@@ -1,6 +1,7 @@
 """Shared test utilities. Only this module imports canvit (PyTorch reference)."""
 
 import logging
+from pathlib import Path
 
 import mlx.core as mx
 import numpy as np
@@ -84,9 +85,10 @@ def pt_model():
 
 @pytest.fixture(scope="session")
 def mlx_model():
-    from canvit_mlx import load_canvit
-    log.info("Loading MLX model from %s", WEIGHTS)
-    return load_canvit(WEIGHTS)
+    from canvit_mlx import load_from_local
+    w = Path(WEIGHTS)
+    log.info("Loading MLX model from %s", w)
+    return load_from_local(w, w.with_suffix(".json"))
 
 
 @pytest.fixture(scope="session")

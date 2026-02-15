@@ -1,11 +1,11 @@
 """Load a CanViT model from pre-converted MLX safetensors.
 
-Supports local paths and HuggingFace Hub repo IDs.
-HF Hub loading requires the [hub] extra (huggingface_hub).
-Use convert.py + push_to_hub.py to create and upload MLX weights.
+Provides two entry points:
+  - load_from_local: from local .safetensors + config.json
+  - load_from_hf_hub: download from HuggingFace Hub, then load
 """
 
-__all__ = ["load_canvit"]
+__all__ = ["load_from_local", "load_from_hf_hub"]
 
 import json
 import logging
@@ -21,7 +21,8 @@ log = logging.getLogger(__name__)
 DEFAULT_HF_REPO = "canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16-mlx"
 
 
-def _load_local(weights_path: Path, config_path: Path) -> CanViT:
+def load_from_local(weights_path: Path, config_path: Path) -> CanViT:
+    """Load CanViT from local .safetensors + config.json."""
     mc = json.loads(config_path.read_text())["model_config"]
     cfg = CanViTConfig(**mc)
     model = CanViT(cfg)
@@ -36,23 +37,20 @@ def _load_local(weights_path: Path, config_path: Path) -> CanViT:
     return model
 
 
-def _download_from_hub(repo_id: str) -> tuple[Path, Path]:
+def _download_hf_from_hub(repo_id: str) -> tuple[Path, Path]:
     try:
         from huggingface_hub import hf_hub_download
-    except ImportError:
+    except ImportError as e:
         raise ImportError(
             f"huggingface_hub is required to load from HF Hub ({repo_id!r}). Install the [hub] extra to enable this."
-        ) from None
+        ) from e
     log.info("Downloading from HF Hub: %s", repo_id)
     weights = Path(hf_hub_download(repo_id, "model.safetensors"))
     config = Path(hf_hub_download(repo_id, "config.json"))
     return weights, config
 
 
-def load_canvit(source: str = DEFAULT_HF_REPO) -> CanViT:
-    """Load CanViT from a local .safetensors path or HF Hub repo ID."""
-    local = Path(source)
-    if local.exists():
-        return _load_local(local, local.with_suffix(".json"))
-    weights, config = _download_from_hub(source)
-    return _load_local(weights, config)
+def load_from_hf_hub(repo_id: str) -> CanViT:
+    """Download CanViT weights from HF Hub and load."""
+    weights, config = _download_hf_from_hub(repo_id)
+    return load_from_local(weights, config)
