@@ -107,8 +107,8 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "mlx" },
-    { name = "mlx-data" },
     { name = "numpy" },
+    { name = "pillow" },
     { name = "safetensors" },
 ]
 
@@ -151,8 +151,8 @@ dev = [
 requires-dist = [
     { name = "huggingface-hub", marker = "extra == 'hub'", specifier = ">=0.30" },
     { name = "mlx", specifier = ">=0.30.6" },
-    { name = "mlx-data", specifier = ">=0.2.0" },
     { name = "numpy", specifier = ">=2.2.0,<2.4.0" },
+    { name = "pillow", specifier = ">=11.0" },
     { name = "safetensors", specifier = ">=0.7.0" },
 ]
 provides-extras = ["hub"]
@@ -1347,18 +1347,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/6b/b8/3adbc441924209a7e4c568308b2a0b54bd09aee6a68db5bae85304791e54/mlx-0.30.6-cp314-cp314-macosx_26_0_arm64.whl", hash = "sha256:b2c5e8a090a753ef99a1380a4d059c983083f36198864f6df9faaf1223d083df", size = 575041, upload-time = "2026-02-06T03:45:34.814Z" },
     { url = "https://files.pythonhosted.org/packages/3f/54/9d9e06804fb2088202a2cdf60458e00b221f71420bea285720b60f9e82b5/mlx-0.30.6-cp314-cp314-manylinux_2_35_aarch64.whl", hash = "sha256:9ceddede4af0de31d1f6b3099f70e5469d60cd7c546975dedbdbeab3519cab3f", size = 624002, upload-time = "2026-02-06T03:45:36Z" },
     { url = "https://files.pythonhosted.org/packages/42/92/3140a15a50cb1f9267a6552171e1dfa577861de53e093124bc43707f2a0e/mlx-0.30.6-cp314-cp314-manylinux_2_35_x86_64.whl", hash = "sha256:4a6ffd2d16728cf95f63a1b555d7c2eaeea686a0e6b73228bd265411cb5d77a4", size = 663569, upload-time = "2026-02-06T03:45:37.242Z" },
-]
-
-[[package]]
-name = "mlx-data"
-version = "0.2.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "numpy" },
-]
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/71/58/43ca670c6e72c52f512ff505e23fd65bdf9b16deba2daf2b1819feac4972/mlx_data-0.2.0-cp312-cp312-macosx_14_0_arm64.whl", hash = "sha256:a3054fdd898c23373856df5ccbb18d434aca0e751adcbc7ef45484f21f2c3b97", size = 13682041, upload-time = "2025-09-26T21:44:13.917Z" },
-    { url = "https://files.pythonhosted.org/packages/77/c2/ae479055fdd6bcbb53bbcfcba93d1833b743aa011a40797c054e66e8245c/mlx_data-0.2.0-cp313-cp313-macosx_14_0_arm64.whl", hash = "sha256:d3113f2489ca77385d50ac09953087fa4e100927895198b8b1301970466529d2", size = 13682296, upload-time = "2025-09-26T22:17:14.715Z" },
 ]
 
 [[package]]
