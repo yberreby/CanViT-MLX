@@ -13,7 +13,7 @@ uv run just                        # lint + typecheck + dep enforcement + tests
 from canvit_mlx import load_from_hf_hub, load_and_preprocess, Viewpoint, extract_glimpse_at_viewpoint
 
 image = load_and_preprocess("test_data/Cat03.jpg", target_size=512)
-model = load_from_hf_hub("canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16-mlx")
+model = load_from_hf_hub("canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16-2026-02-02-mlx")
 state = model.init_state(batch_size=1, canvas_grid_size=32)
 vp = Viewpoint.full_scene(batch_size=1)
 glimpse = extract_glimpse_at_viewpoint(image, vp, glimpse_size_px=128)

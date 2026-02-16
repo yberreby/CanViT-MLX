@@ -52,7 +52,7 @@ class Arrow(Enum):
 
 @dataclass
 class Config:
-    model_repo: str = "canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16-mlx"
+    model_repo: str = "canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16-2026-02-02-mlx"
     scene_size: int = 512
     canvas_grid: int = 8
     glimpse_px: int = 128

@@ -22,7 +22,7 @@ from sklearn.decomposition import PCA
 
 from canvit_mlx import Viewpoint, load_from_hf_hub, load_and_preprocess
 
-HF_REPO = "canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16-mlx"
+HF_REPO = "canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16-2026-02-02-mlx"
 PROBE_REPO = "yberreby/dinov3-vitb16-lvd1689m-in1k-512x512-linear-clf-probe"
 
 

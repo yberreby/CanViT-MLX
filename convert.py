@@ -22,7 +22,7 @@ from safetensors.torch import save_file
 
 log = logging.getLogger(__name__)
 
-HF_REPO = "canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16"
+HF_REPO = "canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16-2026-02-02"
 WEIGHTS_DIR = Path("weights")
 
 VERIFY_SEED = 42
