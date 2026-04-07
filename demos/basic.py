@@ -20,7 +20,7 @@ from numpy.typing import NDArray
 from safetensors import safe_open
 from sklearn.decomposition import PCA
 
-from canvit_mlx import Viewpoint, load_from_hf_hub, load_and_preprocess
+from canvit_mlx import Viewpoint, extract_glimpse_at_viewpoint, load_from_hf_hub, load_and_preprocess
 
 HF_REPO = "canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16-2026-02-02-mlx"
 PROBE_REPO = "yberreby/dinov3-vitb16-lvd1689m-in1k-512x512-linear-clf-probe"
@@ -65,14 +65,16 @@ def main(cfg: Config) -> None:
     print(f"Loading probe from {PROBE_REPO}...")
     probe_w, probe_b = load_probe(PROBE_REPO)
 
-    # Load + preprocess image
+    # Load + preprocess image at scene resolution, then extract glimpse
+    scene_size = cfg.canvas_grid * model.cfg.patch_size
     print(f"Loading {cfg.image}...")
-    glimpse = load_and_preprocess(str(cfg.image), cfg.glimpse_px)
+    image = load_and_preprocess(str(cfg.image), scene_size)
 
     # Forward pass
     print("Running inference...")
     state = model.init_state(1, cfg.canvas_grid)
     vp = Viewpoint.full_scene(1)
+    glimpse = extract_glimpse_at_viewpoint(image, vp, cfg.glimpse_px)
     out = model(glimpse, state, vp)
     mx.eval(out.state.canvas, out.state.recurrent_cls)
 
