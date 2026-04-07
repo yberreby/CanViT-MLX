@@ -38,7 +38,7 @@ class TestPatchEmbed:
 
 class TestVPE:
     def test_full_scene(self, mlx_model, pt_model):
-        from canvit.viewpoint import Viewpoint
+        from canvit_pytorch.viewpoint import Viewpoint
         vp = Viewpoint.full_scene(batch_size=B, device=torch.device("cpu"))
         ref = pt_model.vpe(y=vp.centers[:, 0], x=vp.centers[:, 1], s=vp.scales).detach().numpy()
 

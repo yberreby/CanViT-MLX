@@ -24,5 +24,8 @@ bench/*.png
 mlflow.db
 mlruns/
 
+# Scratch
+throwaway/
+
 # macOS
 .DS_Store

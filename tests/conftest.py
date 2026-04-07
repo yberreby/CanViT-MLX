@@ -40,18 +40,18 @@ def assert_close(
 # -- PyTorch helpers (only used in tests) --
 
 def load_pt_model():
-    from canvit import CanViTForPretrainingHFHub
+    from canvit_pytorch import CanViTForPretrainingHFHub
     log.info("Loading PyTorch model from HF: %s", HF_REPO)
     return CanViTForPretrainingHFHub.from_pretrained(HF_REPO).eval()
 
 
 def pt_viewpoint_full(batch_size: int = B):
-    from canvit.viewpoint import Viewpoint
+    from canvit_pytorch.viewpoint import Viewpoint
     return Viewpoint.full_scene(batch_size=batch_size, device=torch.device("cpu"))
 
 
 def pt_viewpoint(centers: list[list[float]], scales: list[float]):
-    from canvit.viewpoint import Viewpoint
+    from canvit_pytorch.viewpoint import Viewpoint
     return Viewpoint(centers=torch.tensor(centers), scales=torch.tensor(scales))
 
 
@@ -66,12 +66,12 @@ def pt_forward(model, glimpse_pt: torch.Tensor, viewpoint_pt, state_pt) -> dict[
 
 
 def pt_recurrent_state(canvas: np.ndarray, recurrent_cls: np.ndarray):
-    from canvit.model.base.impl import RecurrentState
+    from canvit_pytorch.model.base.impl import RecurrentState
     return RecurrentState(canvas=torch.tensor(canvas), recurrent_cls=torch.tensor(recurrent_cls))
 
 
 def pt_sample(img_pt: torch.Tensor, viewpoint_pt, glimpse_px: int) -> np.ndarray:
-    from canvit.viewpoint import sample_at_viewpoint
+    from canvit_pytorch.viewpoint import sample_at_viewpoint
     out = sample_at_viewpoint(spatial=img_pt, viewpoint=viewpoint_pt, glimpse_size_px=glimpse_px)
     return out.numpy().transpose(0, 2, 3, 1)  # NCHW -> NHWC
 

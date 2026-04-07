@@ -19,11 +19,12 @@ class CanViTConfig:
     canvas_num_heads: int
     canvas_head_dim: int
     enable_vpe: bool
-    teacher_dim: int
-    std_grid_size: int
     enable_reads: bool = True
     canvas_update_mode: Literal["additive", "convex"] = "additive"
     gate_bias_init: float | None = None
+    # Pretraining-specific (required by CanViTForPretraining, ignored by base CanViT)
+    teacher_dim: int | None = None
+    std_grid_size: int | None = None
 
     def __post_init__(self):
         assert (self.canvas_update_mode == "convex") == (self.gate_bias_init is not None), \

@@ -29,9 +29,9 @@ class TestSinCos:
     def test_vs_pytorch(self, pt_model, mlx_model):
         """Compare sin/cos against PyTorch reference for full-scene 8x8 grid."""
         import torch
-        from canvit.coords import canvas_coords_for_glimpse
-        from canvit.rope import compute_rope as pt_compute_rope, make_rope_periods as pt_make_rope_periods
-        from canvit.viewpoint import Viewpoint
+        from canvit_pytorch.coords import canvas_coords_for_glimpse
+        from canvit_pytorch.rope import compute_rope as pt_compute_rope, make_rope_periods as pt_make_rope_periods
+        from canvit_pytorch.viewpoint import Viewpoint
 
         vp = Viewpoint.full_scene(batch_size=1, device=torch.device("cpu"))
         local_pos = canvas_coords_for_glimpse(center=vp.centers, scale=vp.scales, H=8, W=8).flatten(1, 2)

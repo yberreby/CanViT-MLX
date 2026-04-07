@@ -1,6 +1,6 @@
 """CanViT model: recurrent vision transformer with canvas memory."""
 
-__all__ = ["RecurrentState", "CanViTOutput", "CanViT"]
+__all__ = ["RecurrentState", "CanViTOutput", "CanViT", "CanViTForPretraining"]
 
 import logging
 import math
@@ -65,17 +65,6 @@ class CanViT(nn.Module):
         self.recurrent_cls_init = mx.zeros((1, 1, cfg.embed_dim))
 
         self.vpe_encoder = VPEEncoder(cfg.embed_dim) if cfg.enable_vpe else None
-
-        self.scene_patches_ln = nn.LayerNorm(cfg.canvas_dim)
-        self.scene_patches_proj = nn.Linear(cfg.canvas_dim, cfg.teacher_dim)
-        self.scene_cls_ln = nn.LayerNorm(cfg.embed_dim)
-        self.scene_cls_proj = nn.Linear(cfg.embed_dim, cfg.teacher_dim)
-
-        n_spatial = cfg.std_grid_size ** 2
-        self.cls_std_mean = mx.zeros((1, cfg.teacher_dim))
-        self.cls_std_var = mx.ones((1, cfg.teacher_dim))
-        self.scene_std_mean = mx.zeros((n_spatial, cfg.teacher_dim))
-        self.scene_std_var = mx.ones((n_spatial, cfg.teacher_dim))
 
         log.info("CanViT: %d blocks, read_after=%s, write_after=%s, vpe=%s",
                  cfg.n_blocks, read_after, write_after, cfg.enable_vpe)
@@ -150,6 +139,31 @@ class CanViT(nn.Module):
             state = out.state
             outputs.append(out)
         return outputs
+
+    def get_spatial(self, canvas: mx.array) -> mx.array:
+        """Extract spatial tokens from canvas (strip register tokens)."""
+        return canvas[:, self.cfg.n_canvas_registers:]
+
+
+class CanViTForPretraining(CanViT):
+    """CanViT with pretraining prediction heads and standardizers."""
+
+    def __init__(self, cfg: CanViTConfig):
+        super().__init__(cfg)
+        assert cfg.teacher_dim is not None, "teacher_dim required for pretraining model"
+        assert cfg.std_grid_size is not None, "std_grid_size required for pretraining model"
+        td = cfg.teacher_dim
+
+        self.scene_patches_ln = nn.LayerNorm(cfg.canvas_dim)
+        self.scene_patches_proj = nn.Linear(cfg.canvas_dim, td)
+        self.scene_cls_ln = nn.LayerNorm(cfg.embed_dim)
+        self.scene_cls_proj = nn.Linear(cfg.embed_dim, td)
+
+        n_spatial = cfg.std_grid_size ** 2
+        self.cls_std_mean = mx.zeros((1, td))
+        self.cls_std_var = mx.ones((1, td))
+        self.scene_std_mean = mx.zeros((n_spatial, td))
+        self.scene_std_var = mx.ones((n_spatial, td))
 
     def predict_teacher_scene(self, canvas: mx.array) -> mx.array:
         return self.scene_patches_proj(self.scene_patches_ln(canvas[:, self.cfg.n_canvas_registers:]))

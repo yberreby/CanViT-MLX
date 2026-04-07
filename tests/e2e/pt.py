@@ -8,8 +8,8 @@ from . import TRAJECTORY
 
 
 def run(model, image: torch.Tensor) -> list[dict[str, np.ndarray]]:
-    from canvit.model.base.impl import RecurrentState as PtState
-    from canvit.viewpoint import sample_at_viewpoint as pt_sample
+    from canvit_pytorch.model.base.impl import RecurrentState as PtState
+    from canvit_pytorch.viewpoint import sample_at_viewpoint as pt_sample
 
     state = model.init_state(batch_size=1, canvas_grid_size=CANVAS_GRID)
     results: list[dict[str, np.ndarray]] = []

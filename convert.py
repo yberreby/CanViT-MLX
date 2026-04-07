@@ -169,7 +169,7 @@ def _extract_config(model) -> dict:
 def _verify(pt_model, weights_path: str, grid_size: int) -> None:
     """Load converted weights, run one forward pass, compare against PT reference."""
     import mlx.core as mx
-    from canvit.viewpoint import Viewpoint as PtViewpoint
+    from canvit_pytorch.viewpoint import Viewpoint as PtViewpoint
     from canvit_mlx import Viewpoint as MlxViewpoint, load_from_local
 
     log.info("--- Verification: full-scene forward pass ---")
@@ -218,7 +218,7 @@ def _verify(pt_model, weights_path: str, grid_size: int) -> None:
 # ---------------------------------------------------------------------------
 
 def convert(args: Args) -> None:
-    from canvit import CanViTForPretrainingHFHub
+    from canvit_pytorch import CanViTForPretrainingHFHub
     from canvit_mlx.config import CanViTConfig
 
     out = args.out or _default_out(args.repo)

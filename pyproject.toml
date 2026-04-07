@@ -31,22 +31,20 @@ demos = [
 ]
 dev = [
     "basedpyright>=1.37.4",
-    "canvit",
-    "matplotlib>=3.10.8",
-    "mlflow>=3.9.0",
-    "optuna>=4.7.0",
-    "polars>=1.38.1",
+    "canvit-pytorch",
     "pypatree>=0.4.0",
     "pytest>=9.0.2",
     "pytest-cov>=7.0.0",
     "ruff>=0.15.0",
+    "torch>=2.9.0",
+    "torchvision>=0.22.0",
+]
+rl = [
+    "matplotlib>=3.10.8",
+    "mlflow>=3.9.0",
     "scikit-learn>=1.8.0",
-    "statsmodels>=0.14.6",
-    "tach>=0.33.2",
-    "torch>=2.0",
-    "torchvision>=0.25.0",
+    "scipy>=1.15.0",
     "tqdm>=4.67.3",
-    "transformers>=5.1.0",
     "tyro>=1.0.6",
 ]
 
@@ -69,4 +67,4 @@ reportUnusedCallResult = false
 reportAny = false
 
 [tool.uv.sources]
-canvit = { git = "ssh://git@github.com/yberreby/CanViT.git" }
+canvit-pytorch = { git = "ssh://git@github.com/yberreby/CanViT-PyTorch-Next.git" }

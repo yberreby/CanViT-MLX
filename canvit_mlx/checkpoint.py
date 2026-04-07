@@ -13,7 +13,7 @@ from pathlib import Path
 
 import mlx.core as mx
 
-from .canvit import CanViT
+from .canvit import CanViT, CanViTForPretraining
 from .config import CanViTConfig
 
 log = logging.getLogger(__name__)
@@ -21,17 +21,26 @@ log = logging.getLogger(__name__)
 DEFAULT_HF_REPO = "canvit/canvitb16-add-vpe-pretrain-g128px-s512px-in21k-dv3b16-2026-02-02-mlx"
 
 
-def load_from_local(weights_path: Path, config_path: Path) -> CanViT:
-    """Load CanViT from local .safetensors + config.json."""
-    mc = json.loads(config_path.read_text())["model_config"]
-    cfg = CanViTConfig(**mc)
-    model = CanViT(cfg)
-
+def _load_weights(weights_path: Path) -> list[tuple[str, mx.array]]:
     from safetensors import safe_open
     weights: list[tuple[str, mx.array]] = []
     with safe_open(str(weights_path), framework="numpy") as f:
         for key in f.keys():
             weights.append((key, mx.array(f.get_tensor(key))))
+    return weights
+
+
+def _config_from_json(config_path: Path) -> CanViTConfig:
+    mc = json.loads(config_path.read_text())["model_config"]
+    return CanViTConfig(**mc)
+
+
+def load_from_local(weights_path: Path, config_path: Path) -> CanViTForPretraining:
+    """Load CanViTForPretraining from local .safetensors + config.json."""
+    cfg = _config_from_json(config_path)
+    model = CanViTForPretraining(cfg)
+
+    weights = _load_weights(weights_path)
     model.load_weights(weights)
     log.info("Loaded %d tensors from %s", len(weights), weights_path)
     return model
@@ -50,7 +59,7 @@ def _download_hf_from_hub(repo_id: str) -> tuple[Path, Path]:
     return weights, config
 
 
-def load_from_hf_hub(repo_id: str) -> CanViT:
-    """Download CanViT weights from HF Hub and load."""
+def load_from_hf_hub(repo_id: str) -> CanViTForPretraining:
+    """Download CanViTForPretraining weights from HF Hub and load."""
     weights, config = _download_hf_from_hub(repo_id)
     return load_from_local(weights, config)
