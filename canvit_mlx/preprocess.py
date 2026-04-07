@@ -17,13 +17,6 @@ def load_and_preprocess(path: str, target_size: int) -> mx.array:
     """
     img = Image.open(path).convert("RGB")
     w, h = img.size
-    short = min(w, h)
-    # Box downsample by integer factor first (fast path for large images)
-    factor = short // target_size
-    if factor > 1:
-        img = img.reduce(factor)
-        w, h = img.size
-    # Bilinear resize so shortest side == target_size
     if w < h:
         new_w, new_h = target_size, int(h * target_size / w)
     else:
