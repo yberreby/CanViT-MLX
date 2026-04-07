@@ -1,0 +1,31 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Artifacts (generated, not committed)
+/weights/
+*.npy
+.coverage
+.pytest_cache/
+outputs/
+
+# Bench outputs (timestamped subdirectories, regenerated)
+bench/20*/
+bench/*.png
+
+# Experiment tracking
+mlflow.db
+mlruns/
+
+# Scratch
+throwaway/
+
+# macOS
+.DS_Store
