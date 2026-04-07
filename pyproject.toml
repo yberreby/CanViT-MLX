@@ -1,6 +1,6 @@
 [project]
 name = "canvit-mlx"
-version = "0.1.0"
+version = "0.1.1"
 description = "CanViT inference on Apple Silicon via MLX"
 readme = "README.md"
 license = "MIT"

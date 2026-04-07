@@ -7,15 +7,7 @@ _[CanViT: Toward Active-Vision Foundation Models](https://arxiv.org/abs/2603.225
 ## Install
 
 ```bash
-pip install canvit-mlx
-```
-
-Or from source:
-
-```bash
-git clone https://github.com/yberreby/CanViT-MLX.git
-cd CanViT-MLX
-uv sync
+uv add "canvit-mlx[hub]"
 ```
 
 ## Quickstart
