@@ -44,7 +44,7 @@ Pretrained on ImageNet-21k via dense latent distillation from DINOv3 ViT-B.
 ## Usage
 
 ```bash
-uv add "canvit-mlx[hub]"
+uv add "canvit-mlx[hub] @ git+https://github.com/yberreby/CanViT-MLX.git"
 ```
 
 ```python
