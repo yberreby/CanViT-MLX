@@ -1,6 +1,6 @@
 # CanViT-MLX
 
-MLX implementation of [CanViT](https://github.com/m2b3/CanViT-PyTorch), the Canvas Vision Transformer, for native Apple Silicon inference.
+> **Experimental.** [MLX](https://github.com/ml-explore/mlx) implementation of [CanViT](https://arxiv.org/abs/2603.22570) for Apple Silicon. Reference implementation: [CanViT-PyTorch](https://github.com/m2b3/CanViT-PyTorch). May break at any time.
 
 _[CanViT: Toward Active-Vision Foundation Models](https://arxiv.org/abs/2603.22570) (arXiv:2603.22570)_
 
